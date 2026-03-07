@@ -469,9 +469,7 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
     <h1>Cadence</h1>
     <div class="header-greeting" id="greeting"></div>
   </div>
-  <div class="header-right">
-    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle day/night"></button>
-  </div>
+  <div class="header-right"></div>
 </header>
 
 <!-- TOAST -->
@@ -642,26 +640,15 @@ function applyTheme(mode) {
   const root = document.documentElement;
   if (mode === 'day') {
     root.classList.add('day');
-    document.getElementById('themeToggle').textContent = '\u2600\uFE0F';
     document.querySelector('meta[name="theme-color"]').content = '#faf6f0';
   } else {
     root.classList.remove('day');
-    document.getElementById('themeToggle').textContent = '\uD83C\uDF19';
     document.querySelector('meta[name="theme-color"]').content = '#0c1a22';
   }
 }
 
-function toggleTheme() {
-  const isDay = document.documentElement.classList.contains('day');
-  const newMode = isDay ? 'night' : 'day';
-  data.settings.themeOverride = newMode;
-  saveData();
-  applyTheme(newMode);
-}
-
 function initTheme() {
-  const mode = data.settings.themeOverride || getAutoTheme();
-  applyTheme(mode);
+  applyTheme(getAutoTheme());
 }
 
 // ===== GREETING =====
@@ -1676,10 +1663,6 @@ function renderSettings() {
           <div class="setting-label">Theme</div>
           <div class="setting-desc">Auto switches at 6am (day) and 8:30pm (night)</div>
         </div>
-        <button class="form-btn form-btn-outline" style="width:auto;padding:6px 14px;font-size:.8rem"
-                onclick="data.settings.themeOverride=null;saveData();initTheme();toast('Theme set to auto')">
-          Reset to Auto
-        </button>
       </div>
     </div>
 
@@ -1787,7 +1770,7 @@ function init() {
 
   // Auto-refresh theme every minute
   setInterval(function() {
-    if (!data.settings.themeOverride) initTheme();
+    initTheme();
     updateGreeting();
   }, 60000);
 }
