@@ -1,0 +1,1797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#9078d0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cadence">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Cadence</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ===== RESET ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-tap-highlight-color:transparent;overflow-x:hidden}
+body{font-family:'Inter',sans-serif;min-height:100vh;min-height:100dvh;overflow-x:hidden;transition:background .6s,color .6s}
+input,button,textarea,select{font-family:inherit;font-size:inherit;border:none;outline:none;background:none}
+button{cursor:pointer}
+a{text-decoration:none;color:inherit}
+
+/* ===== CSS VARIABLES — Night Mode (default) ===== */
+:root{
+  --bg:#0c0a14;
+  --bg-grad:linear-gradient(145deg,#0c0a14 0%,#14102a 50%,#0a0818 100%);
+  --card:rgba(20,16,36,0.7);
+  --card-border:rgba(120,100,180,0.12);
+  --card-shadow:0 2px 12px rgba(0,0,0,0.4);
+  --input-bg:rgba(12,10,22,0.85);
+  --text:#b0a8c4;
+  --text-dim:#605878;
+  --text-bright:#dcd4ec;
+  --accent:#9078d0;
+  --accent-glow:rgba(144,120,208,0.25);
+  --accent-deep:#7060b0;
+  --green:#5a9870;
+  --green-bg:rgba(90,152,112,0.12);
+  --red:#c05858;
+  --red-bg:rgba(192,88,88,0.12);
+  --gold:#c8a84a;
+  --cat-personal:#9078d0;
+  --cat-errands:#d97756;
+  --cat-work:#5a8fd0;
+  --cat-groceries:#5a9870;
+  --cat-health:#d06090;
+  --cat-home:#c8a84a;
+  --cat-finance:#50b0a0;
+  --radius:14px;
+  --radius-sm:8px;
+  --nav-bg:rgba(12,10,22,0.92);
+  --nav-border:rgba(120,100,180,0.1);
+  --blur:blur(16px);
+  --pill-bg:rgba(144,120,208,0.12);
+  --pill-border:rgba(144,120,208,0.25);
+  --modal-bg:rgba(16,12,28,0.95);
+  --toast-bg:rgba(20,16,36,0.95);
+  --suggestion-bg:rgba(144,120,208,0.08);
+}
+
+/* ===== Day Mode ===== */
+:root.day{
+  --bg:#faf6f0;
+  --bg-grad:linear-gradient(145deg,#faf6f0 0%,#f5ede0 50%,#faf8f4 100%);
+  --card:rgba(255,255,255,0.85);
+  --card-border:rgba(180,160,130,0.18);
+  --card-shadow:0 2px 12px rgba(0,0,0,0.06);
+  --input-bg:rgba(255,255,255,0.9);
+  --text:#5a5040;
+  --text-dim:#a09880;
+  --text-bright:#2a2420;
+  --accent:#d97756;
+  --accent-glow:rgba(217,119,86,0.15);
+  --accent-deep:#c46040;
+  --green:#4a8860;
+  --green-bg:rgba(74,136,96,0.1);
+  --red:#c04848;
+  --red-bg:rgba(192,72,72,0.08);
+  --gold:#b89830;
+  --cat-personal:#d97756;
+  --cat-errands:#c46040;
+  --cat-work:#5080c0;
+  --cat-groceries:#4a8860;
+  --cat-health:#c05080;
+  --cat-home:#b89830;
+  --cat-finance:#409888;
+  --nav-bg:rgba(250,246,240,0.94);
+  --nav-border:rgba(180,160,130,0.15);
+  --blur:blur(12px);
+  --pill-bg:rgba(217,119,86,0.1);
+  --pill-border:rgba(217,119,86,0.25);
+  --modal-bg:rgba(250,246,240,0.97);
+  --toast-bg:rgba(255,255,255,0.95);
+  --suggestion-bg:rgba(217,119,86,0.06);
+}
+
+/* ===== LAYOUT ===== */
+body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padding-bottom:calc(70px + env(safe-area-inset-bottom))}
+
+.app-header{
+  position:sticky;top:0;z-index:100;
+  padding:calc(env(safe-area-inset-top,12px) + 8px) 16px 10px;
+  background:var(--nav-bg);
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  border-bottom:1px solid var(--nav-border);
+  display:flex;align-items:center;justify-content:space-between;
+  transition:background .6s;
+}
+.app-header h1{
+  font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:700;
+  color:var(--text-bright);letter-spacing:-0.02em;
+}
+.header-greeting{font-size:.82rem;color:var(--text-dim);margin-top:2px}
+.header-right{display:flex;align-items:center;gap:8px}
+.theme-toggle{
+  width:36px;height:36px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.1rem;background:var(--pill-bg);border:1px solid var(--pill-border);
+  transition:all .3s;
+}
+.theme-toggle:active{transform:scale(.9)}
+
+/* ===== CONTENT ===== */
+.content{max-width:600px;margin:0 auto;padding:12px 16px}
+
+/* ===== QUICK ADD ===== */
+.quick-add{
+  display:flex;gap:8px;align-items:center;
+  background:var(--card);border:1px solid var(--card-border);
+  border-radius:var(--radius);padding:8px 12px;
+  box-shadow:var(--card-shadow);position:relative;
+  transition:border-color .2s,background .6s;
+}
+.quick-add:focus-within{border-color:var(--accent)}
+.quick-add input{
+  flex:1;background:transparent;color:var(--text-bright);
+  font-size:1rem;padding:6px 0;
+}
+.quick-add input::placeholder{color:var(--text-dim)}
+.quick-add .cat-btn{
+  padding:4px 10px;border-radius:20px;font-size:.7rem;font-weight:600;
+  text-transform:uppercase;letter-spacing:.04em;
+  border:1px solid var(--pill-border);color:var(--accent);
+  background:var(--pill-bg);transition:all .2s;white-space:nowrap;
+}
+.quick-add .add-btn{
+  width:36px;height:36px;border-radius:50%;
+  background:var(--accent);color:#fff;font-size:1.3rem;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .15s,background .2s;flex-shrink:0;
+}
+.quick-add .add-btn:active{transform:scale(.9)}
+
+/* ===== AUTOCOMPLETE ===== */
+.autocomplete{
+  position:absolute;top:100%;left:0;right:0;z-index:50;
+  background:var(--modal-bg);border:1px solid var(--card-border);
+  border-radius:0 0 var(--radius) var(--radius);
+  box-shadow:0 8px 24px rgba(0,0,0,.3);display:none;
+  max-height:200px;overflow-y:auto;
+}
+.autocomplete.open{display:block}
+.ac-item{
+  padding:10px 14px;cursor:pointer;display:flex;justify-content:space-between;
+  align-items:center;border-bottom:1px solid var(--card-border);
+  transition:background .15s;
+}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover,.ac-item.selected{background:var(--accent-glow)}
+.ac-item .ac-text{color:var(--text-bright);font-size:.9rem}
+.ac-item .ac-meta{font-size:.7rem;color:var(--text-dim)}
+
+/* ===== CATEGORY PICKER (modal dropdown) ===== */
+.cat-picker{
+  position:absolute;top:100%;right:50px;z-index:51;
+  background:var(--modal-bg);border:1px solid var(--card-border);
+  border-radius:var(--radius-sm);box-shadow:0 8px 24px rgba(0,0,0,.3);
+  padding:6px 0;display:none;min-width:140px;
+}
+.cat-picker.open{display:block}
+.cat-opt{
+  padding:8px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;
+  font-size:.85rem;color:var(--text);transition:background .15s;
+}
+.cat-opt:hover{background:var(--accent-glow)}
+.cat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ===== SUGGESTIONS ===== */
+.suggestions-section{margin:14px 0 8px}
+.suggestions-header{
+  font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--text-dim);margin-bottom:8px;padding:0 2px;
+}
+.suggestion-pills{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch}
+.suggestion-pills::-webkit-scrollbar{display:none}
+.s-pill{
+  padding:7px 14px;border-radius:20px;font-size:.82rem;font-weight:500;
+  background:var(--suggestion-bg);border:1px solid var(--pill-border);
+  color:var(--accent);white-space:nowrap;cursor:pointer;
+  transition:all .2s;flex-shrink:0;position:relative;
+}
+.s-pill:active{transform:scale(.95)}
+.s-pill .s-reason{
+  display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
+  background:var(--toast-bg);border:1px solid var(--card-border);border-radius:6px;
+  padding:4px 10px;font-size:.68rem;color:var(--text-dim);white-space:nowrap;
+  box-shadow:0 4px 12px rgba(0,0,0,.2);
+}
+.s-pill:hover .s-reason{display:block}
+
+/* ===== TEMPLATE SUGGESTION BANNER ===== */
+.tmpl-banner{
+  background:var(--suggestion-bg);border:1px solid var(--pill-border);
+  border-radius:var(--radius);padding:12px 14px;margin:8px 0;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.tmpl-banner-text{font-size:.85rem;color:var(--text)}
+.tmpl-banner-text strong{color:var(--text-bright)}
+.tmpl-banner-btn{
+  padding:6px 14px;border-radius:20px;font-size:.78rem;font-weight:600;
+  background:var(--accent);color:#fff;transition:transform .15s;
+}
+.tmpl-banner-btn:active{transform:scale(.95)}
+.tmpl-banner-x{
+  padding:4px 8px;color:var(--text-dim);font-size:1.1rem;cursor:pointer;
+}
+
+/* ===== TASK LIST ===== */
+.task-section-label{
+  font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--text-dim);margin:18px 0 8px;padding:0 2px;
+}
+.task-list{display:flex;flex-direction:column;gap:6px}
+
+/* ===== TASK CARD ===== */
+.task-card{
+  background:var(--card);border:1px solid var(--card-border);
+  border-radius:var(--radius);padding:12px 14px;
+  display:flex;align-items:center;gap:12px;
+  position:relative;overflow:hidden;
+  transition:transform .2s,opacity .3s,background .6s;
+  touch-action:pan-y;
+}
+.task-card.completing{
+  transform:translateX(-100%);opacity:0;
+  transition:transform .35s ease-in,opacity .35s ease-in;
+}
+.task-card.completed-card{opacity:.5}
+.task-card.completed-card .task-text{text-decoration:line-through;color:var(--text-dim)}
+
+/* Swipe actions behind the card */
+.swipe-actions{
+  position:absolute;top:0;right:0;bottom:0;
+  display:flex;align-items:stretch;opacity:0;
+  transition:opacity .15s;
+}
+.swipe-act{
+  display:flex;align-items:center;justify-content:center;
+  width:70px;font-size:.75rem;font-weight:600;color:#fff;letter-spacing:.03em;
+}
+.swipe-done{background:var(--green)}
+.swipe-del{background:var(--red)}
+
+/* Checkbox */
+.task-check{
+  width:22px;height:22px;border-radius:6px;border:2px solid var(--text-dim);
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s;font-size:.8rem;color:transparent;
+}
+.task-check:active{transform:scale(.85)}
+.task-card.completed-card .task-check{
+  border-color:var(--green);background:var(--green-bg);color:var(--green);
+}
+
+.task-body{flex:1;min-width:0}
+.task-text{font-size:.92rem;color:var(--text-bright);line-height:1.35;word-break:break-word}
+.task-meta{display:flex;align-items:center;gap:8px;margin-top:3px;flex-wrap:wrap}
+.task-cat{
+  font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;
+  padding:2px 8px;border-radius:10px;
+}
+.task-time{font-size:.72rem;color:var(--text-dim)}
+.task-priority{color:var(--gold);font-size:.85rem}
+
+/* ===== BOTTOM NAV ===== */
+.bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:100;
+  display:flex;align-items:stretch;
+  background:var(--nav-bg);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  border-top:1px solid var(--nav-border);
+  padding-bottom:env(safe-area-inset-bottom);
+  transition:background .6s;
+}
+.nav-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:8px 0 6px;gap:2px;color:var(--text-dim);font-size:.65rem;font-weight:600;
+  letter-spacing:.03em;text-transform:uppercase;transition:color .2s;
+}
+.nav-btn .nav-icon{font-size:1.2rem;transition:color .2s}
+.nav-btn.active,.nav-btn.active .nav-icon{color:var(--accent)}
+
+/* ===== VIEWS ===== */
+.view{display:none}
+.view.active{display:block}
+
+/* ===== MODAL ===== */
+.modal-overlay{
+  position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,.5);
+  display:none;align-items:flex-end;justify-content:center;
+  transition:opacity .2s;
+}
+.modal-overlay.open{display:flex}
+.modal{
+  background:var(--modal-bg);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  border:1px solid var(--card-border);
+  border-radius:var(--radius) var(--radius) 0 0;
+  width:100%;max-width:600px;max-height:85vh;overflow-y:auto;
+  padding:20px 16px calc(20px + env(safe-area-inset-bottom));
+  animation:slideUp .25s ease-out;
+}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.modal-title{
+  font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:700;
+  color:var(--text-bright);margin-bottom:16px;
+}
+.modal-close{
+  position:absolute;top:16px;right:16px;font-size:1.3rem;
+  color:var(--text-dim);cursor:pointer;padding:4px;
+}
+
+/* ===== FORM ELEMENTS ===== */
+.form-group{margin-bottom:14px}
+.form-label{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:6px;display:block}
+.form-input{
+  width:100%;padding:10px 14px;border-radius:var(--radius-sm);
+  background:var(--input-bg);border:1px solid var(--card-border);
+  color:var(--text-bright);font-size:.9rem;transition:border-color .2s;
+}
+.form-input:focus{border-color:var(--accent)}
+.form-select{
+  width:100%;padding:10px 14px;border-radius:var(--radius-sm);
+  background:var(--input-bg);border:1px solid var(--card-border);
+  color:var(--text-bright);font-size:.9rem;
+  -webkit-appearance:none;appearance:none;
+}
+.form-btn{
+  width:100%;padding:12px;border-radius:var(--radius-sm);
+  background:var(--accent);color:#fff;font-size:.9rem;font-weight:600;
+  transition:transform .15s;
+}
+.form-btn:active{transform:scale(.98)}
+.form-btn-outline{
+  background:transparent;border:1px solid var(--accent);color:var(--accent);
+}
+.form-btn-danger{background:var(--red)}
+
+/* ===== TOAST ===== */
+.toast{
+  position:fixed;bottom:calc(80px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--toast-bg);border:1px solid var(--card-border);
+  border-radius:var(--radius-sm);padding:10px 18px;
+  font-size:.85rem;color:var(--text-bright);
+  box-shadow:0 4px 20px rgba(0,0,0,.3);
+  opacity:0;pointer-events:none;transition:all .3s;z-index:300;
+  display:flex;align-items:center;gap:10px;
+}
+.toast.visible{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+.toast-undo{color:var(--accent);font-weight:600;cursor:pointer}
+
+/* ===== INSIGHTS ===== */
+.insight-card{
+  background:var(--card);border:1px solid var(--card-border);
+  border-radius:var(--radius);padding:16px;margin-bottom:12px;
+  box-shadow:var(--card-shadow);transition:background .6s;
+}
+.insight-title{
+  font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--text-dim);margin-bottom:10px;
+}
+.insight-big{font-size:2rem;font-weight:700;color:var(--text-bright)}
+.insight-sub{font-size:.8rem;color:var(--text-dim);margin-top:2px}
+
+/* Heatmap */
+.heatmap{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px}
+.hm-cell{
+  aspect-ratio:1;border-radius:4px;display:flex;align-items:center;justify-content:center;
+  font-size:.7rem;font-weight:600;color:var(--text-dim);
+  transition:background .3s;
+}
+.hm-label{font-size:.6rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);text-align:center}
+
+/* Time bars */
+.time-bars{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.time-bar{display:flex;align-items:center;gap:8px}
+.time-bar-label{font-size:.72rem;color:var(--text-dim);width:60px;text-align:right}
+.time-bar-track{flex:1;height:20px;background:var(--input-bg);border-radius:10px;overflow:hidden}
+.time-bar-fill{height:100%;border-radius:10px;background:var(--accent);transition:width .5s}
+.time-bar-val{font-size:.72rem;color:var(--text-dim);width:28px}
+
+/* Frequent tasks */
+.freq-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.freq-item{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--card-border)}
+.freq-item:last-child{border-bottom:none}
+.freq-name{font-size:.85rem;color:var(--text-bright)}
+.freq-stat{font-size:.75rem;color:var(--text-dim)}
+
+/* ===== TEMPLATE CARDS ===== */
+.tmpl-card{
+  background:var(--card);border:1px solid var(--card-border);
+  border-radius:var(--radius);padding:14px;margin-bottom:10px;
+  box-shadow:var(--card-shadow);cursor:pointer;transition:all .2s;
+}
+.tmpl-card:active{transform:scale(.99)}
+.tmpl-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.tmpl-name{font-size:1rem;font-weight:600;color:var(--text-bright)}
+.tmpl-count{font-size:.75rem;color:var(--text-dim)}
+.tmpl-items-preview{font-size:.8rem;color:var(--text);line-height:1.4}
+.tmpl-meta{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:.72rem;color:var(--text-dim)}
+.tmpl-add-btn{
+  display:flex;align-items:center;justify-content:center;
+  padding:14px;border:2px dashed var(--card-border);
+  border-radius:var(--radius);color:var(--text-dim);font-size:.9rem;
+  margin-bottom:10px;cursor:pointer;transition:all .2s;
+}
+.tmpl-add-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ===== SETTINGS ===== */
+.setting-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 0;border-bottom:1px solid var(--card-border);
+}
+.setting-row:last-child{border-bottom:none}
+.setting-label{font-size:.9rem;color:var(--text-bright)}
+.setting-desc{font-size:.75rem;color:var(--text-dim);margin-top:2px}
+.toggle{
+  width:44px;height:26px;border-radius:13px;
+  background:var(--text-dim);position:relative;cursor:pointer;transition:background .2s;
+}
+.toggle.on{background:var(--accent)}
+.toggle::after{
+  content:'';position:absolute;top:3px;left:3px;
+  width:20px;height:20px;border-radius:50%;background:#fff;
+  transition:transform .2s;
+}
+.toggle.on::after{transform:translateX(18px)}
+
+/* ===== EMPTY STATE ===== */
+.empty-state{
+  text-align:center;padding:60px 20px;color:var(--text-dim);
+}
+.empty-icon{font-size:3rem;margin-bottom:12px;opacity:.5}
+.empty-text{font-size:.9rem;line-height:1.5}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:380px){
+  .content{padding:10px 12px}
+  .app-header h1{font-size:1.25rem}
+  .task-card{padding:10px 12px;gap:10px}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="app-header">
+  <div>
+    <h1>Cadence</h1>
+    <div class="header-greeting" id="greeting"></div>
+  </div>
+  <div class="header-right">
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle day/night"></button>
+  </div>
+</header>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ===== VIEW: TODAY ===== -->
+<div id="view-today" class="view active">
+  <div class="content">
+    <!-- Quick Add -->
+    <div class="quick-add" id="quickAdd">
+      <input type="text" id="taskInput" placeholder="Add a task..." autocomplete="off"
+             oninput="onTaskInput()" onkeydown="onTaskKeydown(event)">
+      <button class="cat-btn" id="catBtn" onclick="toggleCatPicker()">personal</button>
+      <button class="add-btn" onclick="addTaskFromInput()">+</button>
+      <!-- Autocomplete dropdown -->
+      <div class="autocomplete" id="autocomplete"></div>
+      <!-- Category picker -->
+      <div class="cat-picker" id="catPicker"></div>
+    </div>
+
+    <!-- Smart Suggestions -->
+    <div class="suggestions-section" id="suggestionsSection" style="display:none">
+      <div class="suggestions-header">Suggested for you</div>
+      <div class="suggestion-pills" id="suggestionPills"></div>
+    </div>
+
+    <!-- Template Suggestions -->
+    <div id="tmplSuggestions"></div>
+
+    <!-- Task List -->
+    <div class="task-section-label" id="activeLabel" style="display:none">Tasks</div>
+    <div class="task-list" id="taskList"></div>
+
+    <div class="task-section-label" id="completedLabel" style="display:none">Completed</div>
+    <div class="task-list" id="completedList"></div>
+
+    <!-- Empty state -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">&#9745;</div>
+      <div class="empty-text">No tasks yet.<br>Type above to add your first task.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== VIEW: ROUTINES ===== -->
+<div id="view-routines" class="view">
+  <div class="content">
+    <div class="tmpl-add-btn" onclick="openTemplateModal()">+ New Routine</div>
+    <div id="routinesList"></div>
+    <div class="empty-state" id="routinesEmpty">
+      <div class="empty-icon">&#128203;</div>
+      <div class="empty-text">No routines yet.<br>Create one to auto-fill recurring tasks.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== VIEW: INSIGHTS ===== -->
+<div id="view-insights" class="view">
+  <div class="content" id="insightsContent"></div>
+</div>
+
+<!-- ===== VIEW: SETTINGS ===== -->
+<div id="view-settings" class="view">
+  <div class="content" id="settingsContent"></div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-view="today" onclick="showView('today',this)">
+    <span class="nav-icon">&#9745;</span><span>Today</span>
+  </button>
+  <button class="nav-btn" data-view="routines" onclick="showView('routines',this)">
+    <span class="nav-icon">&#128203;</span><span>Routines</span>
+  </button>
+  <button class="nav-btn" data-view="insights" onclick="showView('insights',this)">
+    <span class="nav-icon">&#128200;</span><span>Insights</span>
+  </button>
+  <button class="nav-btn" data-view="settings" onclick="showView('settings',this)">
+    <span class="nav-icon">&#9881;</span><span>Settings</span>
+  </button>
+</nav>
+
+<script>
+/* ===================================================================
+   CADENCE — Smart Daily Tasks & Routines
+   =================================================================== */
+
+// ===== CONSTANTS =====
+const STORAGE_KEY = 'cadence_data_v1';
+const CATEGORIES = {
+  personal: {label:'Personal', color:'var(--cat-personal)'},
+  errands:  {label:'Errands',  color:'var(--cat-errands)'},
+  work:     {label:'Work',     color:'var(--cat-work)'},
+  groceries:{label:'Groceries',color:'var(--cat-groceries)'},
+  health:   {label:'Health',   color:'var(--cat-health)'},
+  home:     {label:'Home',     color:'var(--cat-home)'},
+  finance:  {label:'Finance',  color:'var(--cat-finance)'}
+};
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const FULL_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const TIME_SLOTS = {morning:'Morning',afternoon:'Afternoon',evening:'Evening',night:'Night'};
+
+// ===== GLOBAL STATE =====
+let data = null;
+let currentView = 'today';
+let selectedCategory = 'personal';
+let acIndex = -1; // autocomplete selection index
+let toastTimer = null;
+let lastUndoAction = null;
+
+// ===== DATA PERSISTENCE =====
+function loadData() {
+  try {
+    data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (!data) throw 0;
+    // ensure all fields
+    if (!data.tasks) data.tasks = [];
+    if (!data.history) data.history = [];
+    if (!data.freq) data.freq = {};
+    if (!data.templates) data.templates = [];
+    if (!data.settings) data.settings = {};
+  } catch(e) {
+    data = {
+      tasks: [],
+      history: [],
+      freq: {},
+      templates: [],
+      settings: {
+        name: '',
+        defaultCategory: 'personal',
+        sortOrder: 'priority',
+        suggestionsEnabled: true,
+        templateAutoLoad: true,
+        themeOverride: null // null=auto, 'day', 'night'
+      }
+    };
+  }
+}
+
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+// ===== THEME =====
+function getTimeSlot(hour) {
+  if (hour >= 5 && hour < 12) return 'morning';
+  if (hour >= 12 && hour < 17) return 'afternoon';
+  if (hour >= 17 && hour < 21) return 'evening';
+  return 'night';
+}
+
+function getAutoTheme() {
+  const h = new Date().getHours();
+  const m = new Date().getMinutes();
+  // Day: 6:00am - 8:29pm, Night: 8:30pm - 5:59am
+  if (h > 6 && h < 20) return 'day';
+  if (h === 6) return 'day';
+  if (h === 20 && m < 30) return 'day';
+  return 'night';
+}
+
+function applyTheme(mode) {
+  const root = document.documentElement;
+  if (mode === 'day') {
+    root.classList.add('day');
+    document.getElementById('themeToggle').textContent = '\u2600\uFE0F';
+    document.querySelector('meta[name="theme-color"]').content = '#faf6f0';
+  } else {
+    root.classList.remove('day');
+    document.getElementById('themeToggle').textContent = '\uD83C\uDF19';
+    document.querySelector('meta[name="theme-color"]').content = '#0c0a14';
+  }
+}
+
+function toggleTheme() {
+  const isDay = document.documentElement.classList.contains('day');
+  const newMode = isDay ? 'night' : 'day';
+  data.settings.themeOverride = newMode;
+  saveData();
+  applyTheme(newMode);
+}
+
+function initTheme() {
+  const mode = data.settings.themeOverride || getAutoTheme();
+  applyTheme(mode);
+}
+
+// ===== GREETING =====
+function updateGreeting() {
+  const h = new Date().getHours();
+  const name = data.settings.name;
+  let greet;
+  if (h >= 5 && h < 12) greet = 'Good morning';
+  else if (h >= 12 && h < 17) greet = 'Good afternoon';
+  else if (h >= 17 && h < 21) greet = 'Good evening';
+  else greet = 'Good night';
+  if (name) greet += ', ' + name;
+  const d = new Date();
+  const dateStr = FULL_DAYS[d.getDay()] + ', ' +
+    d.toLocaleDateString('en-US', {month:'short',day:'numeric'});
+  document.getElementById('greeting').textContent = greet + ' \u00B7 ' + dateStr;
+}
+
+// ===== VIEW MANAGEMENT =====
+function showView(viewId, btn) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + viewId).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  else {
+    document.querySelectorAll('.nav-btn').forEach(b => {
+      if (b.dataset.view === viewId) b.classList.add('active');
+    });
+  }
+  currentView = viewId;
+  if (viewId === 'today') { renderTasks(); renderSuggestions(); renderTemplateSuggestions(); }
+  if (viewId === 'routines') renderRoutines();
+  if (viewId === 'insights') renderInsights();
+  if (viewId === 'settings') renderSettings();
+}
+
+// ===== TOAST =====
+function toast(msg, undoFn) {
+  const el = document.getElementById('toast');
+  el.innerHTML = msg + (undoFn ? ' <span class="toast-undo" onclick="doUndo()">Undo</span>' : '');
+  lastUndoAction = undoFn || null;
+  el.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.remove('visible'); lastUndoAction = null; }, 3500);
+}
+
+function doUndo() {
+  if (lastUndoAction) { lastUndoAction(); lastUndoAction = null; }
+  document.getElementById('toast').classList.remove('visible');
+}
+
+// ===== MODAL =====
+function openModal(html) {
+  document.getElementById('modalContent').innerHTML = html;
+  document.getElementById('modalOverlay').classList.add('open');
+  history.pushState({modal:true}, '');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+window.addEventListener('popstate', function(e) {
+  if (document.getElementById('modalOverlay').classList.contains('open')) {
+    closeModal();
+  }
+});
+
+// ===== ID GENERATION =====
+function genId(prefix) {
+  return prefix + '_' + Date.now() + '_' + Math.random().toString(36).substr(2,4);
+}
+
+// ===== CATEGORY PICKER =====
+function toggleCatPicker() {
+  const el = document.getElementById('catPicker');
+  if (el.classList.contains('open')) { el.classList.remove('open'); return; }
+  let html = '';
+  for (const [k,v] of Object.entries(CATEGORIES)) {
+    html += `<div class="cat-opt" onclick="selectCategory('${k}')">
+      <span class="cat-dot" style="background:${v.color}"></span>${v.label}</div>`;
+  }
+  el.innerHTML = html;
+  el.classList.add('open');
+}
+
+function selectCategory(cat) {
+  selectedCategory = cat;
+  document.getElementById('catBtn').textContent = CATEGORIES[cat].label.toLowerCase();
+  document.getElementById('catPicker').classList.remove('open');
+}
+
+// Close pickers on outside click
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#catPicker') && !e.target.closest('#catBtn')) {
+    document.getElementById('catPicker').classList.remove('open');
+  }
+  if (!e.target.closest('.quick-add')) {
+    document.getElementById('autocomplete').classList.remove('open');
+  }
+});
+
+// ===== TASK CRUD =====
+function addTask(text, category, opts) {
+  opts = opts || {};
+  const task = {
+    id: genId('t'),
+    text: text.trim(),
+    category: category || selectedCategory,
+    createdAt: new Date().toISOString(),
+    completedAt: null,
+    dueTime: opts.dueTime || null,
+    fromTemplate: opts.fromTemplate || null,
+    fromSuggestion: opts.fromSuggestion || false,
+    priority: opts.priority || 0
+  };
+  data.tasks.push(task);
+  saveData();
+  renderTasks();
+  renderSuggestions();
+  return task;
+}
+
+function addTaskFromInput() {
+  const input = document.getElementById('taskInput');
+  const text = input.value.trim();
+  if (!text) return;
+  // Check if freq has a matching entry to inherit category
+  const key = text.toLowerCase();
+  const freqEntry = data.freq[key];
+  const cat = freqEntry ? freqEntry.category : selectedCategory;
+  addTask(text, cat);
+  input.value = '';
+  document.getElementById('autocomplete').classList.remove('open');
+  acIndex = -1;
+  toast('Task added');
+}
+
+function completeTask(id) {
+  const idx = data.tasks.findIndex(t => t.id === id);
+  if (idx < 0) return;
+  const task = data.tasks[idx];
+  if (task.completedAt) {
+    // Un-complete
+    task.completedAt = null;
+    saveData();
+    renderTasks();
+    return;
+  }
+  task.completedAt = new Date().toISOString();
+  recordCompletion(task);
+  saveData();
+
+  // Animate
+  const card = document.getElementById('card-' + id);
+  if (card) {
+    card.classList.add('completing');
+    setTimeout(() => renderTasks(), 350);
+  } else {
+    renderTasks();
+  }
+  renderSuggestions();
+
+  // Save for undo
+  const undoTask = JSON.parse(JSON.stringify(task));
+  toast('Task completed', function() {
+    const t = data.tasks.find(x => x.id === id);
+    if (t) { t.completedAt = null; saveData(); renderTasks(); renderSuggestions(); }
+  });
+}
+
+function deleteTask(id) {
+  const idx = data.tasks.findIndex(t => t.id === id);
+  if (idx < 0) return;
+  const removed = data.tasks.splice(idx, 1)[0];
+  saveData();
+  renderTasks();
+  renderSuggestions();
+  toast('Task deleted', function() {
+    data.tasks.push(removed);
+    saveData();
+    renderTasks();
+    renderSuggestions();
+  });
+}
+
+function togglePriority(id) {
+  const task = data.tasks.find(t => t.id === id);
+  if (!task) return;
+  task.priority = task.priority ? 0 : 1;
+  saveData();
+  renderTasks();
+}
+
+// ===== RENDER TASKS =====
+function renderTasks() {
+  const active = data.tasks.filter(t => !t.completedAt);
+  const completed = data.tasks.filter(t => t.completedAt);
+
+  // Sort active tasks
+  const order = data.settings.sortOrder || 'priority';
+  active.sort((a, b) => {
+    if (order === 'priority') {
+      if (a.priority !== b.priority) return b.priority - a.priority;
+    }
+    return new Date(a.createdAt) - new Date(b.createdAt);
+  });
+
+  // Sort completed by completion time (newest first)
+  completed.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+
+  const taskList = document.getElementById('taskList');
+  const compList = document.getElementById('completedList');
+  const activeLabel = document.getElementById('activeLabel');
+  const compLabel = document.getElementById('completedLabel');
+  const empty = document.getElementById('emptyState');
+
+  if (active.length === 0 && completed.length === 0) {
+    empty.style.display = '';
+    activeLabel.style.display = 'none';
+    compLabel.style.display = 'none';
+    taskList.innerHTML = '';
+    compList.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+  activeLabel.style.display = active.length ? '' : 'none';
+  compLabel.style.display = completed.length ? '' : 'none';
+
+  taskList.innerHTML = active.map(t => taskCardHTML(t, false)).join('');
+  compList.innerHTML = completed.map(t => taskCardHTML(t, true)).join('');
+
+  // Attach swipe handlers
+  taskList.querySelectorAll('.task-card').forEach(card => {
+    const id = card.dataset.id;
+    attachSwipe(card, id);
+  });
+}
+
+function taskCardHTML(task, isCompleted) {
+  const cat = CATEGORIES[task.category] || CATEGORIES.personal;
+  const catStyle = `background:${cat.color}20;color:${cat.color}`;
+  return `<div class="task-card${isCompleted?' completed-card':''}" id="card-${task.id}" data-id="${task.id}">
+    <div class="swipe-actions">
+      <div class="swipe-act swipe-done">Done</div>
+      <div class="swipe-act swipe-del">Delete</div>
+    </div>
+    <div class="task-check" onclick="completeTask('${task.id}')">${isCompleted?'\u2713':''}</div>
+    <div class="task-body" onclick="openEditModal('${task.id}')">
+      <div class="task-text">${esc(task.text)}</div>
+      <div class="task-meta">
+        <span class="task-cat" style="${catStyle}">${cat.label}</span>
+        ${task.dueTime ? `<span class="task-time">${task.dueTime}</span>` : ''}
+        ${task.priority ? '<span class="task-priority">\u2605</span>' : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ===== SWIPE GESTURES =====
+function attachSwipe(card, taskId) {
+  let startX = 0, startY = 0, swiping = false;
+  card.addEventListener('touchstart', function(e) {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    swiping = false;
+    card.style.transition = 'none';
+  }, {passive: true});
+
+  card.addEventListener('touchmove', function(e) {
+    const dx = e.touches[0].clientX - startX;
+    const dy = Math.abs(e.touches[0].clientY - startY);
+    if (dy > 30 && !swiping) return;
+    if (dx < -10) {
+      swiping = true;
+      e.preventDefault();
+      const shift = Math.max(dx, -140);
+      card.style.transform = 'translateX(' + shift + 'px)';
+      const actions = card.querySelector('.swipe-actions');
+      if (actions) actions.style.opacity = Math.min(1, Math.abs(dx) / 80);
+    }
+  }, {passive: false});
+
+  card.addEventListener('touchend', function(e) {
+    card.style.transition = 'transform .2s';
+    const dx = e.changedTouches[0].clientX - startX;
+    if (dx < -100) {
+      // Full swipe — complete or delete
+      if (data.tasks.find(t => t.id === taskId && t.completedAt)) {
+        deleteTask(taskId);
+      } else {
+        completeTask(taskId);
+      }
+    } else {
+      card.style.transform = 'translateX(0)';
+      const actions = card.querySelector('.swipe-actions');
+      if (actions) actions.style.opacity = '0';
+    }
+    swiping = false;
+  }, {passive: true});
+}
+
+// ===== EDIT TASK MODAL =====
+function openEditModal(id) {
+  const task = data.tasks.find(t => t.id === id);
+  if (!task) return;
+  let catOpts = '';
+  for (const [k,v] of Object.entries(CATEGORIES)) {
+    catOpts += `<option value="${k}"${task.category===k?' selected':''}>${v.label}</option>`;
+  }
+  openModal(`
+    <div class="modal-title">Edit Task</div>
+    <div class="form-group">
+      <label class="form-label">Task</label>
+      <input class="form-input" id="editText" value="${esc(task.text)}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Category</label>
+      <select class="form-select" id="editCat">${catOpts}</select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Time (optional)</label>
+      <input class="form-input" type="time" id="editTime" value="${task.dueTime||''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Priority</label>
+      <div class="toggle${task.priority?' on':''}" id="editPriority" onclick="this.classList.toggle('on')"></div>
+    </div>
+    <button class="form-btn" onclick="saveEdit('${id}')" style="margin-bottom:10px">Save</button>
+    <button class="form-btn form-btn-danger" onclick="deleteTask('${id}');closeModal()">Delete</button>
+  `);
+}
+
+function saveEdit(id) {
+  const task = data.tasks.find(t => t.id === id);
+  if (!task) return;
+  task.text = document.getElementById('editText').value.trim() || task.text;
+  task.category = document.getElementById('editCat').value;
+  task.dueTime = document.getElementById('editTime').value || null;
+  task.priority = document.getElementById('editPriority').classList.contains('on') ? 1 : 0;
+  saveData();
+  closeModal();
+  renderTasks();
+}
+
+// ===== FREQUENCY ENGINE =====
+function recordCompletion(task) {
+  const key = task.text.toLowerCase().trim();
+  const now = new Date();
+  const entry = data.freq[key] || {
+    count: 0, lastDone: null, avgGapDays: 0,
+    category: task.category,
+    dayDistribution: [0,0,0,0,0,0,0],
+    timeSlots: {morning:0, afternoon:0, evening:0, night:0},
+    streakWeeks: 0, lastSuggestedDate: null
+  };
+
+  entry.count++;
+
+  // Update gap average (exponential moving average)
+  if (entry.lastDone) {
+    const gap = daysBetween(new Date(entry.lastDone), now);
+    entry.avgGapDays = entry.avgGapDays === 0 ? gap : entry.avgGapDays * 0.7 + gap * 0.3;
+  }
+
+  entry.dayDistribution[now.getDay()]++;
+  entry.timeSlots[getTimeSlot(now.getHours())]++;
+
+  // Streak tracking
+  const thisWeek = weekKey(now);
+  const lastWeek = entry.lastDone ? weekKey(new Date(entry.lastDone)) : null;
+  if (lastWeek) {
+    const diff = weekDiff(lastWeek, thisWeek);
+    if (diff <= 1) entry.streakWeeks = (entry.streakWeeks || 0) + (diff === 1 ? 1 : 0);
+    else entry.streakWeeks = 1;
+  } else {
+    entry.streakWeeks = 1;
+  }
+
+  entry.lastDone = dateStr(now);
+  entry.category = task.category;
+  data.freq[key] = entry;
+
+  // History
+  data.history.push({
+    text: key,
+    textOriginal: task.text,
+    category: task.category,
+    completedAt: now.toISOString(),
+    dayOfWeek: now.getDay(),
+    hourOfDay: now.getHours(),
+    timeSlot: getTimeSlot(now.getHours()),
+    source: task.fromSuggestion ? 'suggestion' : task.fromTemplate ? 'template' : 'manual'
+  });
+}
+
+function daysBetween(a, b) {
+  return Math.round(Math.abs(b - a) / 86400000);
+}
+
+function dateStr(d) {
+  return d.toISOString().split('T')[0];
+}
+
+function weekKey(d) {
+  const jan1 = new Date(d.getFullYear(), 0, 1);
+  const week = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+  return d.getFullYear() + '-W' + week;
+}
+
+function weekDiff(w1, w2) {
+  const [y1, n1] = w1.split('-W').map(Number);
+  const [y2, n2] = w2.split('-W').map(Number);
+  return Math.abs((y2 * 52 + n2) - (y1 * 52 + n1));
+}
+
+// ===== PRUNE HISTORY =====
+function pruneHistory() {
+  const lastPrune = localStorage.getItem('cadence_last_prune');
+  const today = dateStr(new Date());
+  if (lastPrune === today) return;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - (data.settings.completedRetention || 90));
+  const cutoffStr = cutoff.toISOString();
+  data.history = data.history.filter(h => h.completedAt > cutoffStr);
+  // Also clean completed tasks older than 24h
+  data.tasks = data.tasks.filter(t => {
+    if (!t.completedAt) return true;
+    return new Date(t.completedAt) > new Date(Date.now() - 86400000);
+  });
+  saveData();
+  localStorage.setItem('cadence_last_prune', today);
+}
+
+// ===== SMART SUGGESTIONS =====
+function computeSuggestions() {
+  const now = new Date();
+  const todayDOW = now.getDay();
+  const currentSlot = getTimeSlot(now.getHours());
+  const today = dateStr(now);
+  const activeTasks = new Set(data.tasks.filter(t => !t.completedAt).map(t => t.text.toLowerCase().trim()));
+
+  const results = [];
+
+  for (const [key, entry] of Object.entries(data.freq)) {
+    // Skip if already active
+    if (activeTasks.has(key)) continue;
+    // Skip if already suggested today and dismissed
+    if (entry.lastSuggestedDate === today) continue;
+    if (entry.count < 2) continue; // need at least 2 completions
+
+    let score = 0;
+    let reasons = [];
+
+    // Frequency score (0-40)
+    if (entry.avgGapDays > 0 && entry.lastDone) {
+      const daysSince = daysBetween(new Date(entry.lastDone), now);
+      if (daysSince >= entry.avgGapDays * 0.8) {
+        score += Math.min(30, 30 * daysSince / entry.avgGapDays);
+        const gap = Math.round(entry.avgGapDays);
+        if (gap === 1) reasons.push('Daily');
+        else if (gap <= 7) reasons.push('Every ' + gap + ' days');
+        else reasons.push('Every ' + Math.round(gap/7) + ' weeks');
+      }
+    }
+    if (entry.count >= 10) score += 5;
+    if (entry.count >= 25) score += 5;
+
+    // Day-of-week score (0-25)
+    const daySum = entry.dayDistribution.reduce((a,b) => a + b, 0);
+    if (daySum > 0) {
+      const dayPct = entry.dayDistribution[todayDOW] / daySum;
+      if (dayPct > 0.2) {
+        score += 25 * dayPct;
+        reasons.push('Usually ' + DAY_NAMES[todayDOW] + 's');
+      }
+    }
+
+    // Time-of-day score (0-20)
+    const slotSum = Object.values(entry.timeSlots).reduce((a,b) => a + b, 0);
+    if (slotSum > 0) {
+      const slotPct = (entry.timeSlots[currentSlot] || 0) / slotSum;
+      if (slotPct > 0.25) {
+        score += 20 * slotPct;
+        reasons.push(TIME_SLOTS[currentSlot]);
+      }
+    }
+
+    // Recency score (0-15)
+    if (entry.lastDone) {
+      const daysSince = daysBetween(new Date(entry.lastDone), now);
+      if (daysSince <= 7) score += 15 * (1 - daysSince / 7);
+      else if (daysSince > 30) score -= 10;
+    }
+
+    // Streak bonus (0-10)
+    if (entry.streakWeeks >= 4) {
+      score += Math.min(10, entry.streakWeeks);
+      reasons.push(entry.streakWeeks + '-week streak');
+    }
+
+    if (score >= 12) {
+      results.push({
+        text: entry.textOriginal || key,
+        key: key,
+        score: score,
+        reason: reasons[0] || (entry.count + 'x done'),
+        category: entry.category
+      });
+    }
+  }
+
+  results.sort((a, b) => b.score - a.score);
+  return results.slice(0, 8);
+}
+
+function renderSuggestions() {
+  if (!data.settings.suggestionsEnabled) {
+    document.getElementById('suggestionsSection').style.display = 'none';
+    return;
+  }
+  const suggestions = computeSuggestions();
+  const section = document.getElementById('suggestionsSection');
+  const pills = document.getElementById('suggestionPills');
+  if (suggestions.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  pills.innerHTML = suggestions.map(s => {
+    return `<div class="s-pill" onclick="addFromSuggestion('${esc(s.key)}','${s.category}','${esc(s.text)}')">
+      ${esc(s.text)}
+      <span class="s-reason">${esc(s.reason)}</span>
+    </div>`;
+  }).join('');
+}
+
+function addFromSuggestion(key, category, text) {
+  addTask(text, category, {fromSuggestion: true});
+  toast('Added from suggestion');
+}
+
+// ===== AUTOCOMPLETE =====
+function getAutocomplete(input) {
+  const q = input.toLowerCase().trim();
+  if (q.length < 2) return [];
+  return Object.entries(data.freq)
+    .filter(([key]) => key.includes(q))
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 5)
+    .map(([key, entry]) => ({
+      text: entry.textOriginal || key,
+      category: entry.category,
+      count: entry.count
+    }));
+}
+
+function onTaskInput() {
+  const input = document.getElementById('taskInput').value;
+  const results = getAutocomplete(input);
+  const ac = document.getElementById('autocomplete');
+  if (results.length === 0) {
+    ac.classList.remove('open');
+    acIndex = -1;
+    return;
+  }
+  ac.innerHTML = results.map((r, i) => {
+    const cat = CATEGORIES[r.category] || CATEGORIES.personal;
+    return `<div class="ac-item${i===acIndex?' selected':''}" onclick="selectAutocomplete(${i})">
+      <span class="ac-text">${esc(r.text)}</span>
+      <span class="ac-meta">${r.count}x \u00B7 ${cat.label}</span>
+    </div>`;
+  }).join('');
+  ac.classList.add('open');
+  ac._results = results;
+}
+
+function onTaskKeydown(e) {
+  const ac = document.getElementById('autocomplete');
+  const results = ac._results || [];
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    acIndex = Math.min(acIndex + 1, results.length - 1);
+    onTaskInput();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    acIndex = Math.max(acIndex - 1, -1);
+    onTaskInput();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (acIndex >= 0 && results[acIndex]) {
+      selectAutocomplete(acIndex);
+    } else {
+      addTaskFromInput();
+    }
+  } else if (e.key === 'Escape') {
+    ac.classList.remove('open');
+    acIndex = -1;
+  }
+}
+
+function selectAutocomplete(i) {
+  const ac = document.getElementById('autocomplete');
+  const results = ac._results || [];
+  if (!results[i]) return;
+  document.getElementById('taskInput').value = results[i].text;
+  selectedCategory = results[i].category;
+  document.getElementById('catBtn').textContent = (CATEGORIES[selectedCategory]||CATEGORIES.personal).label.toLowerCase();
+  ac.classList.remove('open');
+  acIndex = -1;
+  addTaskFromInput();
+}
+
+// ===== TEMPLATE SUGGESTIONS (TODAY VIEW) =====
+function renderTemplateSuggestions() {
+  const el = document.getElementById('tmplSuggestions');
+  if (!data.settings.templateAutoLoad || data.templates.length === 0) {
+    el.innerHTML = '';
+    return;
+  }
+  const dow = new Date().getDay();
+  const today = dateStr(new Date());
+  const dismissed = JSON.parse(sessionStorage.getItem('cadence_tmpl_dismissed') || '[]');
+
+  const matching = data.templates.filter(t => {
+    if (dismissed.includes(t.id)) return false;
+    if (t.lastUsedDate === today) return false;
+    if (t.autoDay === null || t.autoDay === undefined) return false;
+    if (t.autoDay === 7) return true; // daily
+    if (t.autoDay === 8) return dow >= 1 && dow <= 5; // weekdays
+    if (t.autoDay === 9) return dow === 0 || dow === 6; // weekends
+    return t.autoDay === dow;
+  });
+
+  if (matching.length === 0) { el.innerHTML = ''; return; }
+
+  el.innerHTML = matching.map(t => {
+    return `<div class="tmpl-banner">
+      <div class="tmpl-banner-text"><strong>${esc(t.name)}</strong> \u00B7 ${t.items.length} items</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="tmpl-banner-btn" onclick="loadTemplate('${t.id}')">Load</button>
+        <span class="tmpl-banner-x" onclick="dismissTmplBanner('${t.id}')">\u00D7</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function dismissTmplBanner(id) {
+  const dismissed = JSON.parse(sessionStorage.getItem('cadence_tmpl_dismissed') || '[]');
+  dismissed.push(id);
+  sessionStorage.setItem('cadence_tmpl_dismissed', JSON.stringify(dismissed));
+  renderTemplateSuggestions();
+}
+
+// ===== TEMPLATES / ROUTINES =====
+function renderRoutines() {
+  const el = document.getElementById('routinesList');
+  const empty = document.getElementById('routinesEmpty');
+  if (data.templates.length === 0) {
+    el.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  el.innerHTML = data.templates.map(t => {
+    const dayLabel = getAutoDayLabel(t.autoDay);
+    const preview = t.items.slice(0, 3).join(', ') + (t.items.length > 3 ? '...' : '');
+    return `<div class="tmpl-card" onclick="openTemplateDetail('${t.id}')">
+      <div class="tmpl-header">
+        <span class="tmpl-name">${esc(t.name)}</span>
+        <span class="tmpl-count">${t.items.length} items</span>
+      </div>
+      <div class="tmpl-items-preview">${esc(preview)}</div>
+      <div class="tmpl-meta">
+        ${t.category ? '<span>' + (CATEGORIES[t.category]||{}).label + '</span>' : ''}
+        ${dayLabel ? '<span>' + dayLabel + '</span>' : ''}
+        ${t.useCount ? '<span>Used ' + t.useCount + 'x</span>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function getAutoDayLabel(d) {
+  if (d === null || d === undefined) return '';
+  if (d === 7) return 'Daily';
+  if (d === 8) return 'Weekdays';
+  if (d === 9) return 'Weekends';
+  return FULL_DAYS[d] + 's';
+}
+
+function openTemplateModal(editId) {
+  const tmpl = editId ? data.templates.find(t => t.id === editId) : null;
+  const name = tmpl ? tmpl.name : '';
+  const items = tmpl ? tmpl.items : [];
+  const category = tmpl ? tmpl.category : 'personal';
+  const autoDay = tmpl ? tmpl.autoDay : null;
+
+  let catOpts = '';
+  for (const [k,v] of Object.entries(CATEGORIES)) {
+    catOpts += `<option value="${k}"${category===k?' selected':''}>${v.label}</option>`;
+  }
+  let dayOpts = '<option value="">None</option>';
+  FULL_DAYS.forEach((d, i) => dayOpts += `<option value="${i}"${autoDay===i?' selected':''}>${d}</option>`);
+  dayOpts += `<option value="7"${autoDay===7?' selected':''}>Daily</option>`;
+  dayOpts += `<option value="8"${autoDay===8?' selected':''}>Weekdays</option>`;
+  dayOpts += `<option value="9"${autoDay===9?' selected':''}>Weekends</option>`;
+
+  openModal(`
+    <div class="modal-title">${tmpl ? 'Edit' : 'New'} Routine</div>
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input class="form-input" id="tmplName" value="${esc(name)}" placeholder="e.g. Weekly Groceries">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Category</label>
+      <select class="form-select" id="tmplCat">${catOpts}</select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Auto-suggest on</label>
+      <select class="form-select" id="tmplDay">${dayOpts}</select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Items</label>
+      <div id="tmplItems" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+        ${items.map((item, i) => `<div style="display:flex;gap:6px;align-items:center">
+          <input class="form-input tmpl-item-input" value="${esc(item)}" style="flex:1">
+          <span style="color:var(--red);cursor:pointer;font-size:1.1rem" onclick="this.parentElement.remove()">\u00D7</span>
+        </div>`).join('')}
+      </div>
+      <div style="display:flex;gap:6px">
+        <input class="form-input" id="tmplNewItem" placeholder="Add item..." style="flex:1"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();addTmplItem()}">
+        <button class="form-btn" onclick="addTmplItem()" style="width:auto;padding:8px 16px">+</button>
+      </div>
+    </div>
+    <button class="form-btn" onclick="saveTemplate('${editId||''}')" style="margin-bottom:10px">Save</button>
+    ${tmpl ? `<button class="form-btn form-btn-danger" onclick="deleteTemplate('${editId}')">Delete</button>` : ''}
+  `);
+}
+
+function addTmplItem() {
+  const input = document.getElementById('tmplNewItem');
+  const text = input.value.trim();
+  if (!text) return;
+  const container = document.getElementById('tmplItems');
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:6px;align-items:center';
+  div.innerHTML = `<input class="form-input tmpl-item-input" value="${esc(text)}" style="flex:1">
+    <span style="color:var(--red);cursor:pointer;font-size:1.1rem" onclick="this.parentElement.remove()">\u00D7</span>`;
+  container.appendChild(div);
+  input.value = '';
+  input.focus();
+}
+
+function saveTemplate(editId) {
+  const name = document.getElementById('tmplName').value.trim();
+  if (!name) { toast('Name is required'); return; }
+  const items = [];
+  document.querySelectorAll('.tmpl-item-input').forEach(input => {
+    const v = input.value.trim();
+    if (v) items.push(v);
+  });
+  if (items.length === 0) { toast('Add at least one item'); return; }
+  const category = document.getElementById('tmplCat').value;
+  const dayVal = document.getElementById('tmplDay').value;
+  const autoDay = dayVal === '' ? null : parseInt(dayVal);
+
+  if (editId) {
+    const tmpl = data.templates.find(t => t.id === editId);
+    if (tmpl) {
+      tmpl.name = name;
+      tmpl.items = items;
+      tmpl.category = category;
+      tmpl.autoDay = autoDay;
+    }
+  } else {
+    data.templates.push({
+      id: genId('tmpl'),
+      name: name,
+      items: items,
+      category: category,
+      lastUsed: null,
+      lastUsedDate: null,
+      useCount: 0,
+      autoDay: autoDay
+    });
+  }
+  saveData();
+  closeModal();
+  renderRoutines();
+  toast(editId ? 'Routine updated' : 'Routine created');
+}
+
+function deleteTemplate(id) {
+  data.templates = data.templates.filter(t => t.id !== id);
+  saveData();
+  closeModal();
+  renderRoutines();
+  toast('Routine deleted');
+}
+
+function openTemplateDetail(id) {
+  const tmpl = data.templates.find(t => t.id === id);
+  if (!tmpl) return;
+  openModal(`
+    <div class="modal-title">${esc(tmpl.name)}</div>
+    <div style="margin-bottom:16px">
+      ${tmpl.items.map(item => `<div style="padding:8px 0;border-bottom:1px solid var(--card-border);color:var(--text-bright);font-size:.9rem">${esc(item)}</div>`).join('')}
+    </div>
+    <button class="form-btn" onclick="loadTemplate('${id}')" style="margin-bottom:10px">Load All Tasks</button>
+    <button class="form-btn form-btn-outline" onclick="openTemplateModal('${id}')" style="margin-bottom:10px">Edit</button>
+  `);
+}
+
+function loadTemplate(id) {
+  const tmpl = data.templates.find(t => t.id === id);
+  if (!tmpl) return;
+  let added = 0;
+  tmpl.items.forEach(item => {
+    // Don't add duplicates
+    const exists = data.tasks.some(t => !t.completedAt && t.text.toLowerCase() === item.toLowerCase());
+    if (!exists) {
+      addTask(item, tmpl.category, {fromTemplate: tmpl.id});
+      added++;
+    }
+  });
+  tmpl.useCount = (tmpl.useCount || 0) + 1;
+  tmpl.lastUsed = new Date().toISOString();
+  tmpl.lastUsedDate = dateStr(new Date());
+  saveData();
+  closeModal();
+  renderTasks();
+  renderTemplateSuggestions();
+  toast(added + ' tasks added from ' + tmpl.name);
+}
+
+// ===== INSIGHTS VIEW =====
+function renderInsights() {
+  const el = document.getElementById('insightsContent');
+  const now = new Date();
+  const today = dateStr(now);
+
+  // Stats
+  const todayCompleted = data.history.filter(h => h.completedAt.startsWith(today)).length;
+  const todayActive = data.tasks.filter(t => !t.completedAt).length;
+  const weekStart = new Date(now);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const weekStr = dateStr(weekStart);
+  const weekCompleted = data.history.filter(h => h.completedAt >= weekStr + 'T00:00:00').length;
+
+  // Day distribution (from freq)
+  const dayTotals = [0,0,0,0,0,0,0];
+  for (const entry of Object.values(data.freq)) {
+    entry.dayDistribution.forEach((v, i) => dayTotals[i] += v);
+  }
+  const maxDay = Math.max(...dayTotals, 1);
+  const busiestDay = dayTotals.indexOf(Math.max(...dayTotals));
+
+  // Time distribution
+  const timeTotals = {morning:0,afternoon:0,evening:0,night:0};
+  for (const entry of Object.values(data.freq)) {
+    for (const [slot, count] of Object.entries(entry.timeSlots)) {
+      timeTotals[slot] += count;
+    }
+  }
+  const maxTime = Math.max(...Object.values(timeTotals), 1);
+
+  // Most frequent tasks
+  const freqList = Object.entries(data.freq)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 10);
+
+  // Streaks
+  const streaks = Object.entries(data.freq)
+    .filter(([k, v]) => v.streakWeeks >= 3)
+    .sort((a, b) => b[1].streakWeeks - a[1].streakWeeks)
+    .slice(0, 5);
+
+  const totalCompleted = data.history.length;
+
+  el.innerHTML = `
+    <!-- Stats Row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+      <div class="insight-card" style="text-align:center">
+        <div class="insight-big">${todayCompleted}</div>
+        <div class="insight-sub">Done today</div>
+      </div>
+      <div class="insight-card" style="text-align:center">
+        <div class="insight-big">${todayActive}</div>
+        <div class="insight-sub">Remaining</div>
+      </div>
+      <div class="insight-card" style="text-align:center">
+        <div class="insight-big">${weekCompleted}</div>
+        <div class="insight-sub">This week</div>
+      </div>
+    </div>
+
+    <!-- Total -->
+    <div class="insight-card">
+      <div class="insight-title">All Time</div>
+      <div class="insight-big">${totalCompleted}</div>
+      <div class="insight-sub">tasks completed \u00B7 ${Object.keys(data.freq).length} unique tasks learned</div>
+    </div>
+
+    <!-- Weekly Heatmap -->
+    <div class="insight-card">
+      <div class="insight-title">Busiest Days</div>
+      ${dayTotals.some(d => d > 0) ? `
+        <div class="insight-sub" style="margin-bottom:8px">Most active on ${FULL_DAYS[busiestDay]}s</div>
+        <div class="heatmap">
+          ${DAY_NAMES.map(d => `<div class="hm-label">${d}</div>`).join('')}
+          ${dayTotals.map(d => {
+            const intensity = d / maxDay;
+            const bg = intensity === 0 ? 'var(--input-bg)' :
+              `rgba(${document.documentElement.classList.contains('day') ? '217,119,86' : '144,120,208'},${0.15 + intensity * 0.7})`;
+            return `<div class="hm-cell" style="background:${bg}">${d||''}</div>`;
+          }).join('')}
+        </div>
+      ` : '<div class="insight-sub">Complete some tasks to see patterns</div>'}
+    </div>
+
+    <!-- Time of Day -->
+    <div class="insight-card">
+      <div class="insight-title">Time of Day</div>
+      <div class="time-bars">
+        ${['morning','afternoon','evening','night'].map(slot => {
+          const pct = (timeTotals[slot] / maxTime * 100).toFixed(0);
+          return `<div class="time-bar">
+            <span class="time-bar-label">${TIME_SLOTS[slot]}</span>
+            <div class="time-bar-track"><div class="time-bar-fill" style="width:${pct}%"></div></div>
+            <span class="time-bar-val">${timeTotals[slot]}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- Most Frequent -->
+    ${freqList.length > 0 ? `
+    <div class="insight-card">
+      <div class="insight-title">Most Frequent</div>
+      <div class="freq-list">
+        ${freqList.map(([key, v]) => {
+          let freq = '';
+          if (v.avgGapDays > 0) {
+            const gap = Math.round(v.avgGapDays);
+            if (gap === 1) freq = 'Daily';
+            else if (gap <= 7) freq = 'Every ' + gap + ' days';
+            else freq = 'Every ' + Math.round(gap/7) + ' weeks';
+          }
+          return `<div class="freq-item">
+            <span class="freq-name">${esc(v.textOriginal || key)}</span>
+            <span class="freq-stat">${v.count}x${freq ? ' \u00B7 ' + freq : ''}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
+
+    <!-- Streaks -->
+    ${streaks.length > 0 ? `
+    <div class="insight-card">
+      <div class="insight-title">Active Streaks</div>
+      <div class="freq-list">
+        ${streaks.map(([key, v]) => {
+          return `<div class="freq-item">
+            <span class="freq-name">${esc(v.textOriginal || key)}</span>
+            <span class="freq-stat">${v.streakWeeks}-week streak</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
+  `;
+}
+
+// ===== SETTINGS VIEW =====
+function renderSettings() {
+  const s = data.settings;
+  const el = document.getElementById('settingsContent');
+  el.innerHTML = `
+    <div class="insight-card">
+      <div class="insight-title">Profile</div>
+      <div class="form-group">
+        <label class="form-label">Your Name</label>
+        <input class="form-input" id="settingName" value="${esc(s.name||'')}" placeholder="For greetings"
+               onchange="data.settings.name=this.value.trim();saveData();updateGreeting()">
+      </div>
+    </div>
+
+    <div class="insight-card">
+      <div class="insight-title">Preferences</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Smart Suggestions</div>
+          <div class="setting-desc">Show task suggestions based on your habits</div>
+        </div>
+        <div class="toggle${s.suggestionsEnabled!==false?' on':''}" onclick="toggleSetting('suggestionsEnabled',this)"></div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Routine Auto-suggest</div>
+          <div class="setting-desc">Prompt to load routines on scheduled days</div>
+        </div>
+        <div class="toggle${s.templateAutoLoad!==false?' on':''}" onclick="toggleSetting('templateAutoLoad',this)"></div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Theme</div>
+          <div class="setting-desc">Auto switches at 6am (day) and 8:30pm (night)</div>
+        </div>
+        <button class="form-btn form-btn-outline" style="width:auto;padding:6px 14px;font-size:.8rem"
+                onclick="data.settings.themeOverride=null;saveData();initTheme();toast('Theme set to auto')">
+          Reset to Auto
+        </button>
+      </div>
+    </div>
+
+    <div class="insight-card">
+      <div class="insight-title">Data</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Export Data</div>
+          <div class="setting-desc">Download all data as JSON</div>
+        </div>
+        <button class="form-btn form-btn-outline" style="width:auto;padding:6px 14px;font-size:.8rem"
+                onclick="exportData()">Export</button>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Import Data</div>
+          <div class="setting-desc">Restore from a backup</div>
+        </div>
+        <button class="form-btn form-btn-outline" style="width:auto;padding:6px 14px;font-size:.8rem"
+                onclick="importData()">Import</button>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Clear History</div>
+          <div class="setting-desc">Remove all completed task history</div>
+        </div>
+        <button class="form-btn form-btn-danger" style="width:auto;padding:6px 14px;font-size:.8rem"
+                onclick="clearHistory()">Clear</button>
+      </div>
+    </div>
+
+    <div style="text-align:center;padding:20px;color:var(--text-dim);font-size:.75rem">
+      Cadence v1.0 \u00B7 Service Worker cadence-v1
+    </div>
+  `;
+}
+
+function toggleSetting(key, el) {
+  el.classList.toggle('on');
+  data.settings[key] = el.classList.contains('on');
+  saveData();
+}
+
+function exportData() {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'cadence-backup-' + dateStr(new Date()) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Data exported');
+}
+
+function importData() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = function() {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const imported = JSON.parse(e.target.result);
+        if (!imported.tasks || !imported.freq) throw new Error('Invalid backup');
+        data = imported;
+        saveData();
+        renderTasks();
+        renderSuggestions();
+        toast('Data imported successfully');
+      } catch(err) {
+        toast('Import failed: invalid file');
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+function clearHistory() {
+  if (!confirm('Clear all task history? This will reset your smart suggestions.')) return;
+  data.history = [];
+  data.freq = {};
+  saveData();
+  renderInsights();
+  toast('History cleared');
+}
+
+// ===== INITIALIZATION =====
+function init() {
+  loadData();
+  pruneHistory();
+  initTheme();
+  updateGreeting();
+  renderTasks();
+  renderSuggestions();
+  renderTemplateSuggestions();
+
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./service-worker.js');
+  }
+
+  // Auto-refresh theme every minute
+  setInterval(function() {
+    if (!data.settings.themeOverride) initTheme();
+    updateGreeting();
+  }, 60000);
+}
+
+init();
+</script>
+</body>
+</html>
