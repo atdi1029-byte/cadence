@@ -4,8 +4,8 @@
   "description": "Smart Daily Tasks & Routines",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0c0a14",
-  "theme_color": "#9078d0",
+  "background_color": "#0c1a22",
+  "theme_color": "#6ecfcf",
   "orientation": "portrait",
   "icons": [
     {
