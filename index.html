@@ -97,6 +97,15 @@ a{text-decoration:none;color:inherit}
 /* ===== LAYOUT ===== */
 body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 
+/* Background mascot */
+.bg-mascot{
+  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:80vw;max-width:380px;
+  opacity:0.06;pointer-events:none;z-index:0;
+  transition:opacity .6s;
+}
+:root.day .bg-mascot{opacity:0.05}
+
 .app-header{
   position:sticky;top:0;z-index:100;
   padding:calc(env(safe-area-inset-top,12px) + 8px) 16px 10px;
@@ -121,7 +130,7 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 .theme-toggle:active{transform:scale(.9)}
 
 /* ===== CONTENT ===== */
-.content{max-width:600px;margin:0 auto;padding:12px 16px}
+.content{max-width:600px;margin:0 auto;padding:12px 16px;position:relative;z-index:1}
 
 /* ===== QUICK ADD ===== */
 .quick-add{
@@ -462,6 +471,9 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 </style>
 </head>
 <body>
+
+<!-- BACKGROUND MASCOT -->
+<img class="bg-mascot" src="bg.png" alt="">
 
 <!-- HEADER -->
 <header class="app-header">
