@@ -296,7 +296,8 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
   padding:8px 0 6px;gap:2px;color:var(--text-dim);font-size:.65rem;font-weight:600;
   letter-spacing:.03em;text-transform:uppercase;transition:color .2s;
 }
-.nav-btn .nav-icon{font-size:1.2rem;transition:color .2s}
+.nav-btn .nav-icon{display:flex;align-items:center;justify-content:center;transition:color .2s}
+.nav-btn .nav-icon svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .nav-btn.active,.nav-btn.active .nav-icon{color:var(--accent)}
 
 /* ===== VIEWS ===== */
@@ -545,16 +546,16 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 <!-- BOTTOM NAV -->
 <nav class="bottom-nav">
   <button class="nav-btn active" data-view="today" onclick="showView('today',this)">
-    <span class="nav-icon">&#9745;</span><span>Today</span>
+    <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg></span><span>Today</span>
   </button>
   <button class="nav-btn" data-view="routines" onclick="showView('routines',this)">
-    <span class="nav-icon">&#128203;</span><span>Routines</span>
+    <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg></span><span>Routines</span>
   </button>
   <button class="nav-btn" data-view="insights" onclick="showView('insights',this)">
-    <span class="nav-icon">&#128200;</span><span>Insights</span>
+    <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><rect x="5" y="12" width="3" height="8" rx="1"/><rect x="10.5" y="8" width="3" height="12" rx="1"/><rect x="16" y="4" width="3" height="16" rx="1"/></svg></span><span>Insights</span>
   </button>
   <button class="nav-btn" data-view="settings" onclick="showView('settings',this)">
-    <span class="nav-icon">&#9881;</span><span>Settings</span>
+    <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1.08-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001.08 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1.08z"/></svg></span><span>Settings</span>
   </button>
 </nav>
 
