@@ -99,13 +99,12 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 
 /* Background mascot */
 .bg-mascot{
-  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-  width:100vw;height:100vh;
-  object-fit:cover;
-  opacity:0.06;pointer-events:none;z-index:0;
+  position:fixed;bottom:10vh;left:50%;transform:translateX(-50%);
+  width:55vw;max-width:280px;
+  opacity:0.045;pointer-events:none;z-index:0;
   transition:opacity .6s;
 }
-:root.day .bg-mascot{opacity:0.05}
+:root.day .bg-mascot{opacity:0.04}
 
 .app-header{
   position:sticky;top:0;z-index:100;
