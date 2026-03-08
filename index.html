@@ -331,7 +331,10 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
   font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;
   padding:2px 8px;border-radius:10px;
 }
-.task-time{font-size:.72rem;color:var(--text-dim)}
+.task-time{
+  font-size:.95rem;font-weight:600;color:var(--accent);
+  margin-left:auto;flex-shrink:0;align-self:center;padding-left:8px;
+}
 .task-priority{color:var(--gold);font-size:.85rem}
 .task-hold{
   font-size:.62rem;font-weight:600;color:var(--gold);
@@ -1000,13 +1003,13 @@ function taskCardHTML(task, isCompleted) {
       <div class="task-text">${esc(titleCase(task.text))}</div>
       <div class="task-meta">
         <span class="task-cat" style="${catStyle}">${cat.label}</span>
-        ${task.dueTime ? `<span class="task-time">${fmt12(task.dueTime)}</span>` : ''}
         ${task.priority ? '<span class="task-priority">\u2605</span>' : ''}
         ${task.hold ? '<span class="task-hold">hold</span>' : ''}
         ${subMeta}
       </div>
       ${subHTML}
     </div>
+    ${task.dueTime ? `<div class="task-time">${fmt12(task.dueTime)}</div>` : ''}
   </div>`;
 }
 
