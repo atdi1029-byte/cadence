@@ -160,6 +160,13 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
   transition:transform .15s,background .2s;flex-shrink:0;
 }
 .quick-add .add-btn:active{transform:scale(.9)}
+.quick-add .spacer-btn{
+  width:28px;height:28px;border-radius:50%;flex-shrink:0;
+  background:var(--card-border);color:var(--text-dim);
+  font-size:1rem;font-weight:700;display:flex;align-items:center;justify-content:center;
+  transition:transform .15s;
+}
+.quick-add .spacer-btn:active{transform:scale(.9)}
 
 /* ===== AUTOCOMPLETE ===== */
 .autocomplete{
@@ -557,6 +564,7 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
       <input type="text" id="taskInput" placeholder="Add a task..." autocomplete="off"
              oninput="onTaskInput()" onkeydown="onTaskKeydown(event)">
       <button class="cat-btn" id="catBtn" onclick="toggleCatPicker()">personal</button>
+      <button class="spacer-btn" onclick="addSpacer()" title="Add spacer">—</button>
       <button class="add-btn" onclick="addTaskFromInput()">+</button>
       <!-- Autocomplete dropdown -->
       <div class="autocomplete" id="autocomplete"></div>
@@ -895,6 +903,13 @@ function addTaskFromInput() {
   document.getElementById('autocomplete').classList.remove('open');
   acIndex = -1;
   toast('Task added');
+}
+
+function addSpacer() {
+  const task = addTask('---', 'personal');
+  task.isHeader = true;
+  saveData();
+  renderTasks();
 }
 
 function completeTask(id) {
