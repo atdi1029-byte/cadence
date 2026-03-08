@@ -1009,7 +1009,7 @@ function taskCardHTML(task, isCompleted) {
         ${task.dueTime ? `<span class="task-time">${task.dueTime}</span>` : ''}
         ${task.priority ? '<span class="task-priority">\u2605</span>' : ''}
         ${task.hold ? '<span class="task-hold">hold</span>' : ''}
-        ${task.tillTime ? `<span class="task-till">till ${esc(task.tillTime)}</span>` : ''}
+        ${task.tillTime ? `<span class="task-till">${esc(task.tillTime)}</span>` : ''}
         ${subMeta}
       </div>
       ${subHTML}
@@ -1257,7 +1257,7 @@ function openEditModal(id) {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Till</label>
+      <label class="form-label">Till / At</label>
       <input class="form-input" id="editTill" placeholder="e.g. 11, 12:15, 3pm" value="${esc(task.tillTime||'')}">
     </div>
     <div class="form-group">
