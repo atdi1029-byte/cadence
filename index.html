@@ -1010,6 +1010,21 @@ function renderTasks() {
     const id = card.dataset.id;
     attachSwipe(card, id);
   });
+  // Attach swipe-to-delete on spacers
+  taskList.querySelectorAll('.section-spacer').forEach(spacer => {
+    const id = spacer.dataset.id;
+    let startX = 0;
+    spacer.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, {passive:true});
+    spacer.addEventListener('touchmove', e => {
+      const dx = e.touches[0].clientX - startX;
+      if (dx < -10) { spacer.style.transform = 'translateX('+Math.max(dx,-140)+'px)'; spacer.style.opacity = Math.max(0.2, 1+dx/140); }
+    }, {passive:true});
+    spacer.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - startX;
+      if (dx < -80) { deleteTask(id); }
+      else { spacer.style.transform = ''; spacer.style.opacity = ''; }
+    }, {passive:true});
+  });
 
   // Attach drag handlers
   initDrag(taskList);
