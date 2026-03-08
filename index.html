@@ -135,7 +135,7 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 
 /* ===== QUICK ADD ===== */
 .quick-add{
-  display:flex;gap:6px;align-items:center;
+  display:flex;gap:8px;align-items:center;
   background:var(--card);border:1px solid var(--card-border);
   border-radius:var(--radius);padding:8px 12px;
   box-shadow:var(--card-shadow);position:relative;
@@ -160,13 +160,11 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
   transition:transform .15s,background .2s;flex-shrink:0;
 }
 .quick-add .add-btn:active{transform:scale(.9)}
-.quick-add .spacer-btn{
-  width:24px;height:24px;border-radius:50%;flex-shrink:0;
-  background:none;border:1.5px solid var(--card-border);color:var(--text-dim);
-  font-size:.75rem;font-weight:700;display:flex;align-items:center;justify-content:center;
-  transition:transform .15s;padding:0;
+.spacer-btn{
+  font-size:.68rem;color:var(--text-dim);padding:2px 8px;
+  border:none;background:none;opacity:.5;
 }
-.quick-add .spacer-btn:active{transform:scale(.9)}
+.spacer-btn:active{opacity:1}
 
 /* ===== AUTOCOMPLETE ===== */
 .autocomplete{
@@ -558,12 +556,14 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
       <input type="text" id="taskInput" placeholder="Add a task..." autocomplete="off"
              oninput="onTaskInput()" onkeydown="onTaskKeydown(event)">
       <button class="cat-btn" id="catBtn" onclick="toggleCatPicker()">personal</button>
-      <button class="spacer-btn" onclick="addSpacer()" title="Add spacer">—</button>
       <button class="add-btn" onclick="addTaskFromInput()">+</button>
       <!-- Autocomplete dropdown -->
       <div class="autocomplete" id="autocomplete"></div>
       <!-- Category picker -->
       <div class="cat-picker" id="catPicker"></div>
+    </div>
+    <div style="text-align:right;margin-top:4px">
+      <button class="spacer-btn" onclick="addSpacer()">+ space</button>
     </div>
 
     <!-- Smart Suggestions -->
