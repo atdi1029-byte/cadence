@@ -764,6 +764,7 @@ function loadData() {
 
 function saveData() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  syncToCloud();
 }
 
 // ===== THEME =====
