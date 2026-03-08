@@ -1981,7 +1981,7 @@ function renderSettings() {
           <div class="setting-desc">Push current data to cloud</div>
         </div>
         <button class="form-btn form-btn-outline" style="width:auto;padding:6px 14px;font-size:.8rem"
-                onclick="syncToCloud();toast('Syncing to cloud...')">Sync</button>
+                onclick="_doSync();toast('Syncing...')">Sync</button>
       </div>
       <div class="setting-row">
         <div>
@@ -1989,7 +1989,7 @@ function renderSettings() {
           <div class="setting-desc">Pull data from cloud backup</div>
         </div>
         <button class="form-btn form-btn-outline" style="width:auto;padding:6px 14px;font-size:.8rem"
-                onclick="loadFromCloud()">Restore</button>
+                onclick="loadFromCloud(true)">Restore</button>
       </div>
     </div>
 
@@ -2089,36 +2089,71 @@ function fireGet(url) {
   img.src = url;
 }
 
+let _syncTimer = null;
 function syncToCloud() {
   if (!SYNC_ENDPOINT) return;
-  const encoded = encodeURIComponent(JSON.stringify(data));
-  // Google Apps Script URL param limit ~7000 chars
-  if (encoded.length > 7000) {
-    // For large data, strip history to fit
-    const lite = Object.assign({}, data, {history: data.history.slice(-200)});
-    const liteEnc = encodeURIComponent(JSON.stringify(lite));
-    if (liteEnc.length > 7000) return; // too big even trimmed
-    fireGet(SYNC_ENDPOINT + '?action=save&data=' + liteEnc);
-  } else {
-    fireGet(SYNC_ENDPOINT + '?action=save&data=' + encoded);
-  }
+  // Debounce — wait 2s after last change before syncing
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(_doSync, 2000);
 }
 
-function loadFromCloud() {
+function _doSync() {
   if (!SYNC_ENDPOINT) return;
-  fetch(SYNC_ENDPOINT + '?action=load')
+  let payload = JSON.stringify(data);
+  // If too large, trim history
+  if (payload.length > 6000) {
+    const lite = Object.assign({}, data, {history: data.history.slice(-100)});
+    payload = JSON.stringify(lite);
+  }
+  const url = SYNC_ENDPOINT + '?action=save&data=' + encodeURIComponent(payload);
+  // Try fetch first (works on most browsers), fall back to fireGet
+  fetch(url, {redirect:'follow'})
+    .then(r => r.text())
+    .then(t => {
+      try {
+        const resp = JSON.parse(t);
+        if (resp.ok) { console.log('Cloud sync OK'); }
+        else { console.warn('Cloud sync error:', resp.error); }
+      } catch(e) { console.warn('Cloud sync parse error'); }
+    })
+    .catch(err => {
+      // fetch failed (CORS redirect on mobile?) — try fireGet as fallback
+      console.warn('fetch sync failed, trying fireGet:', err.message);
+      fireGet(url);
+    });
+}
+
+function loadFromCloud(showToast) {
+  if (!SYNC_ENDPOINT) {
+    if (showToast) toast('No sync URL set');
+    return;
+  }
+  if (showToast) toast('Loading from cloud...');
+  fetch(SYNC_ENDPOINT + '?action=load', {redirect:'follow'})
     .then(r => r.json())
     .then(resp => {
-      if (!resp.ok || !resp.data) return;
+      if (!resp.ok) {
+        if (showToast) toast('Cloud error: ' + (resp.error||'unknown'));
+        return;
+      }
+      if (!resp.data) {
+        if (showToast) toast('Cloud is empty — nothing to restore');
+        return;
+      }
       let cloud;
-      try { cloud = JSON.parse(resp.data); } catch(e) { return; }
-      if (!cloud || !cloud.tasks) return;
+      try { cloud = JSON.parse(resp.data); } catch(e) {
+        if (showToast) toast('Cloud data corrupted');
+        return;
+      }
+      if (!cloud || !cloud.tasks) {
+        if (showToast) toast('Cloud data invalid');
+        return;
+      }
 
       // Merge: if local is empty (just got wiped), take cloud wholesale
       const localTasks = data.tasks.length;
       const localFreq = Object.keys(data.freq).length;
       if (localTasks === 0 && localFreq === 0 && cloud.tasks.length > 0) {
-        // Local is empty, cloud has data — restore from cloud
         data = cloud;
         saveData();
         renderTasks();
@@ -2126,25 +2161,29 @@ function loadFromCloud() {
         renderTemplateSuggestions();
         if (currentView === 'insights') renderInsights();
         if (currentView === 'settings') renderSettings();
-        toast('Restored from cloud backup');
+        toast('Restored ' + cloud.tasks.length + ' tasks from cloud');
         return;
       }
 
       // Otherwise, merge cloud templates we don't have locally
+      let merged = 0;
       if (cloud.templates) {
         for (const ct of cloud.templates) {
           if (!data.templates.find(t => t.id === ct.id)) {
             data.templates.push(ct);
+            merged++;
           }
         }
       }
-      // Merge settings name if local is empty
       if (!data.settings.name && cloud.settings && cloud.settings.name) {
         data.settings.name = cloud.settings.name;
       }
       saveData();
+      if (showToast) toast(merged > 0 ? 'Merged ' + merged + ' templates' : 'Already in sync');
     })
-    .catch(() => {}); // fail silently if offline
+    .catch(err => {
+      if (showToast) toast('Cloud fetch failed: ' + err.message);
+    });
 }
 
 // Auto-sync after every save
