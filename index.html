@@ -105,7 +105,7 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 .bg-mascot{
   position:fixed;top:0;left:0;
   width:100vw;height:100vh;
-  object-fit:contain;object-position:top center;
+  object-fit:cover;object-position:top center;
   opacity:0.6;pointer-events:none;z-index:0;
   transition:opacity .6s;
 }
@@ -1650,7 +1650,12 @@ function getAutocomplete(input) {
   if (q.length < 2) return [];
   return Object.entries(data.freq)
     .filter(([key]) => key.includes(q))
-    .sort((a, b) => b[1].count - a[1].count)
+    .sort((a, b) => {
+      const aCat = a[1].category === selectedCategory ? 1 : 0;
+      const bCat = b[1].category === selectedCategory ? 1 : 0;
+      if (bCat !== aCat) return bCat - aCat;
+      return b[1].count - a[1].count;
+    })
     .slice(0, 5)
     .map(([key, entry]) => ({
       text: entry.textOriginal || key,
