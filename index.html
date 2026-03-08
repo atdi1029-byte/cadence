@@ -99,8 +99,9 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 
 /* Background mascot */
 .bg-mascot{
-  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
-  width:80vw;max-width:380px;
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:100vw;height:100vh;
+  object-fit:cover;
   opacity:0.06;pointer-events:none;z-index:0;
   transition:opacity .6s;
 }
@@ -269,6 +270,34 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 }
 .swipe-done{background:var(--green)}
 .swipe-del{background:var(--red)}
+
+/* Drag handle */
+.drag-handle{
+  color:var(--text-dim);font-size:1.1rem;cursor:grab;
+  padding:2px 2px 2px 0;flex-shrink:0;touch-action:none;
+  opacity:.4;transition:opacity .2s;user-select:none;
+  display:flex;align-items:center;letter-spacing:-2px;
+}
+.drag-handle:active{cursor:grabbing;opacity:.8}
+.task-card.dragging{opacity:.4;transform:scale(.97);transition:opacity .15s,transform .15s}
+.task-card.drag-over{border-top:2px solid var(--accent);margin-top:-1px}
+
+/* Subtasks */
+.subtask-list{margin-top:8px;display:flex;flex-direction:column;gap:4px}
+.subtask{
+  display:flex;align-items:center;gap:8px;padding:4px 0;
+  cursor:pointer;transition:opacity .15s;
+}
+.subtask-done{opacity:.5}
+.subtask-done .subtask-text{text-decoration:line-through}
+.subtask-check{
+  width:16px;height:16px;border-radius:4px;border:1.5px solid var(--text-dim);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.6rem;color:transparent;flex-shrink:0;
+}
+.subtask-done .subtask-check{border-color:var(--green);color:var(--green);background:var(--green-bg)}
+.subtask-text{font-size:.8rem;color:var(--text)}
+.task-sub-count{font-size:.68rem;color:var(--text-dim);background:var(--pill-bg);padding:1px 6px;border-radius:8px}
 
 /* Checkbox */
 .task-check{
@@ -898,24 +927,39 @@ function renderTasks() {
     const id = card.dataset.id;
     attachSwipe(card, id);
   });
+
+  // Attach drag handlers
+  initDrag(taskList);
 }
 
 function taskCardHTML(task, isCompleted) {
   const cat = CATEGORIES[task.category] || CATEGORIES.personal;
   const catStyle = `background:${cat.color}20;color:${cat.color}`;
-  return `<div class="task-card${isCompleted?' completed-card':''}" id="card-${task.id}" data-id="${task.id}">
+  const subs = (task.subtasks || []);
+  const doneCount = subs.filter(s => s.done).length;
+  const subHTML = subs.length ? `<div class="subtask-list">${subs.map((s, i) =>
+    `<div class="subtask${s.done?' subtask-done':''}" onclick="event.stopPropagation();toggleSubtask('${task.id}',${i})">
+      <span class="subtask-check">${s.done?'\u2713':''}</span>
+      <span class="subtask-text">${esc(titleCase(s.text))}</span>
+    </div>`).join('')}
+    </div>` : '';
+  const subMeta = subs.length ? `<span class="task-sub-count">${doneCount}/${subs.length}</span>` : '';
+  return `<div class="task-card${isCompleted?' completed-card':''}" id="card-${task.id}" data-id="${task.id}" draggable="false">
     <div class="swipe-actions">
       <div class="swipe-act swipe-done">Done</div>
       <div class="swipe-act swipe-del">Delete</div>
     </div>
+    <div class="drag-handle" data-id="${task.id}">&#8942;</div>
     <div class="task-check" onclick="completeTask('${task.id}')">${isCompleted?'\u2713':''}</div>
     <div class="task-body" onclick="openEditModal('${task.id}')">
-      <div class="task-text">${esc(task.text)}</div>
+      <div class="task-text">${esc(titleCase(task.text))}</div>
       <div class="task-meta">
         <span class="task-cat" style="${catStyle}">${cat.label}</span>
         ${task.dueTime ? `<span class="task-time">${task.dueTime}</span>` : ''}
         ${task.priority ? '<span class="task-priority">\u2605</span>' : ''}
+        ${subMeta}
       </div>
+      ${subHTML}
     </div>
   </div>`;
 }
@@ -924,6 +968,10 @@ function esc(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+function titleCase(s) {
+  return s.replace(/\b\w/g, c => c.toUpperCase());
 }
 
 // ===== SWIPE GESTURES =====
@@ -969,6 +1017,100 @@ function attachSwipe(card, taskId) {
   }, {passive: true});
 }
 
+// ===== SUBTASKS =====
+function toggleSubtask(taskId, subIndex) {
+  const task = data.tasks.find(t => t.id === taskId);
+  if (!task || !task.subtasks) return;
+  task.subtasks[subIndex].done = !task.subtasks[subIndex].done;
+  saveData();
+  renderTasks();
+}
+
+// ===== DRAG & REORDER =====
+let dragSrcId = null;
+
+function initDrag(taskList) {
+  const cards = taskList.querySelectorAll('.task-card');
+  cards.forEach(card => {
+    const handle = card.querySelector('.drag-handle');
+    if (!handle) return;
+
+    // Touch-based drag
+    let dragClone = null, startY = 0, startIdx = 0, cardH = 0;
+    let moved = false;
+
+    handle.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      dragSrcId = handle.dataset.id;
+      startY = e.touches[0].clientY;
+      cardH = card.offsetHeight + 6; // gap included
+      card.classList.add('dragging');
+      moved = false;
+
+      // Find start index among active tasks
+      const ids = getActiveTaskOrder();
+      startIdx = ids.indexOf(dragSrcId);
+    }, {passive: false});
+
+    handle.addEventListener('touchmove', function(e) {
+      if (!dragSrcId) return;
+      e.preventDefault();
+      moved = true;
+      const dy = e.touches[0].clientY - startY;
+      card.style.transform = `translateY(${dy}px) scale(.97)`;
+      card.style.zIndex = '10';
+      card.style.position = 'relative';
+
+      // Highlight drop target
+      const allCards = taskList.querySelectorAll('.task-card:not(.completed-card)');
+      allCards.forEach(c => c.classList.remove('drag-over'));
+      const overCard = document.elementFromPoint(
+        e.touches[0].clientX, e.touches[0].clientY
+      );
+      const target = overCard ? overCard.closest('.task-card') : null;
+      if (target && target !== card && !target.classList.contains('completed-card')) {
+        target.classList.add('drag-over');
+      }
+    }, {passive: false});
+
+    handle.addEventListener('touchend', function(e) {
+      if (!dragSrcId) return;
+      card.classList.remove('dragging');
+      card.style.transform = '';
+      card.style.zIndex = '';
+      card.style.position = '';
+
+      // Find drop target
+      const allCards = taskList.querySelectorAll('.task-card');
+      let dropTarget = null;
+      allCards.forEach(c => {
+        if (c.classList.contains('drag-over')) dropTarget = c;
+        c.classList.remove('drag-over');
+      });
+
+      if (dropTarget && moved) {
+        reorderTask(dragSrcId, dropTarget.dataset.id);
+      }
+      dragSrcId = null;
+    }, {passive: true});
+  });
+}
+
+function getActiveTaskOrder() {
+  return data.tasks.filter(t => !t.completedAt).map(t => t.id);
+}
+
+function reorderTask(srcId, destId) {
+  const srcIdx = data.tasks.findIndex(t => t.id === srcId);
+  const destIdx = data.tasks.findIndex(t => t.id === destId);
+  if (srcIdx < 0 || destIdx < 0 || srcIdx === destIdx) return;
+  const [moved] = data.tasks.splice(srcIdx, 1);
+  const newDestIdx = data.tasks.findIndex(t => t.id === destId);
+  data.tasks.splice(newDestIdx, 0, moved);
+  saveData();
+  renderTasks();
+}
+
 // ===== EDIT TASK MODAL =====
 function openEditModal(id) {
   const task = data.tasks.find(t => t.id === id);
@@ -977,6 +1119,13 @@ function openEditModal(id) {
   for (const [k,v] of Object.entries(CATEGORIES)) {
     catOpts += `<option value="${k}"${task.category===k?' selected':''}>${v.label}</option>`;
   }
+  const subs = (task.subtasks || []);
+  const subsHTML = subs.map((s, i) =>
+    `<div style="display:flex;gap:6px;align-items:center">
+      <input class="form-input edit-sub-input" value="${esc(s.text)}" style="flex:1">
+      <span style="color:var(--red);cursor:pointer;font-size:1.1rem" onclick="this.parentElement.remove()">\u00D7</span>
+    </div>`).join('');
+
   openModal(`
     <div class="modal-title">Edit Task</div>
     <div class="form-group">
@@ -995,9 +1144,32 @@ function openEditModal(id) {
       <label class="form-label">Priority</label>
       <div class="toggle${task.priority?' on':''}" id="editPriority" onclick="this.classList.toggle('on')"></div>
     </div>
+    <div class="form-group">
+      <label class="form-label">Subtasks</label>
+      <div id="editSubs" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${subsHTML}</div>
+      <div style="display:flex;gap:6px">
+        <input class="form-input" id="editNewSub" placeholder="Add subtask..." style="flex:1"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();addEditSub()}">
+        <button class="form-btn" onclick="addEditSub()" style="width:auto;padding:8px 16px">+</button>
+      </div>
+    </div>
     <button class="form-btn" onclick="saveEdit('${id}')" style="margin-bottom:10px">Save</button>
     <button class="form-btn form-btn-danger" onclick="deleteTask('${id}');closeModal()">Delete</button>
   `);
+}
+
+function addEditSub() {
+  const input = document.getElementById('editNewSub');
+  const text = input.value.trim();
+  if (!text) return;
+  const container = document.getElementById('editSubs');
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:6px;align-items:center';
+  div.innerHTML = `<input class="form-input edit-sub-input" value="${esc(text)}" style="flex:1">
+    <span style="color:var(--red);cursor:pointer;font-size:1.1rem" onclick="this.parentElement.remove()">\u00D7</span>`;
+  container.appendChild(div);
+  input.value = '';
+  input.focus();
 }
 
 function saveEdit(id) {
@@ -1007,6 +1179,14 @@ function saveEdit(id) {
   task.category = document.getElementById('editCat').value;
   task.dueTime = document.getElementById('editTime').value || null;
   task.priority = document.getElementById('editPriority').classList.contains('on') ? 1 : 0;
+  // Collect subtasks
+  const oldSubs = task.subtasks || [];
+  const newSubs = [];
+  document.querySelectorAll('.edit-sub-input').forEach((input, i) => {
+    const v = input.value.trim();
+    if (v) newSubs.push({text: v, done: oldSubs[i] ? oldSubs[i].done : false});
+  });
+  task.subtasks = newSubs;
   saveData();
   closeModal();
   renderTasks();
