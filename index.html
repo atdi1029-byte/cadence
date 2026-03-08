@@ -2407,12 +2407,12 @@ function jsonpFetch(url, callback) {
 }
 
 let _syncTimer = null;
-let _lastLocalSave = 0;   // timestamp of last local save
-let _savePending = false;  // true while save is in flight
+let _lastLocalSave = 0;
 
 function syncToCloud() {
   const ep = getSyncUrl();
   if (!ep) return;
+  _lastLocalSave = Date.now();
   clearTimeout(_syncTimer);
   _syncTimer = setTimeout(_doSync, 2000);
 }
@@ -2420,24 +2420,14 @@ function syncToCloud() {
 function _doSync() {
   const ep = getSyncUrl();
   if (!ep) return;
-  _savePending = true;
   let payload = JSON.stringify(data);
   if (payload.length > 6000) {
     const lite = Object.assign({}, data, {history: data.history.slice(-100)});
     payload = JSON.stringify(lite);
   }
   const url = ep + '?action=save&data=' + encodeURIComponent(payload);
-  // Use JSONP for save too — confirms delivery
-  jsonpFetch(url, function(err, resp) {
-    _savePending = false;
-    if (err) { console.warn('Cloud save failed:', err); return; }
-    if (resp && resp.ok) {
-      _lastLocalSave = Date.now();
-      console.log('Cloud sync OK');
-    } else {
-      console.warn('Cloud save error:', resp && resp.error);
-    }
-  });
+  fireGet(url);
+  console.log('Cloud sync sent');
 }
 
 function loadFromCloud(showToast) {
@@ -2446,10 +2436,8 @@ function loadFromCloud(showToast) {
     if (showToast) toast('No sync URL set');
     return;
   }
-  // Don't overwrite local changes while a save is pending
-  if (_savePending) return;
-  // Don't pull if we saved very recently (give cloud time to update)
-  if (Date.now() - _lastLocalSave < 5000) return;
+  // Don't pull from cloud within 10s of a local save
+  if (!showToast && Date.now() - _lastLocalSave < 10000) return;
 
   if (showToast) toast('Loading from cloud...');
   jsonpFetch(ep + '?action=load', function(err, resp) {
