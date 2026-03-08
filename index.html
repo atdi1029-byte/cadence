@@ -1000,7 +1000,7 @@ function taskCardHTML(task, isCompleted) {
       <div class="task-text">${esc(titleCase(task.text))}</div>
       <div class="task-meta">
         <span class="task-cat" style="${catStyle}">${cat.label}</span>
-        ${task.dueTime ? `<span class="task-time">${task.dueTime}</span>` : ''}
+        ${task.dueTime ? `<span class="task-time">${fmt12(task.dueTime)}</span>` : ''}
         ${task.priority ? '<span class="task-priority">\u2605</span>' : ''}
         ${task.hold ? '<span class="task-hold">hold</span>' : ''}
         ${subMeta}
@@ -1018,6 +1018,14 @@ function esc(s) {
 
 function titleCase(s) {
   return s.replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function fmt12(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'pm' : 'am';
+  const hr = h % 12 || 12;
+  return m ? hr + ':' + String(m).padStart(2,'0') + ampm : hr + ampm;
 }
 
 // ===== SWIPE GESTURES =====
