@@ -900,10 +900,18 @@ function addTaskFromInput() {
 }
 
 function addSpacer() {
-  const task = addTask('---', 'personal');
-  task.isHeader = true;
+  const task = {
+    id: genId('t'),
+    text: '---',
+    category: 'personal',
+    createdAt: new Date().toISOString(),
+    completedAt: null,
+    isHeader: true
+  };
+  data.tasks.unshift(task);
   saveData();
   renderTasks();
+  renderSuggestions();
 }
 
 function completeTask(id) {
