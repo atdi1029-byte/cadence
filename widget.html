@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0c1a22">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tasks">
+<title>Cadence Tasks</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-tap-highlight-color:transparent}
+body{
+  font-family:'Inter',sans-serif;
+  min-height:100vh;min-height:100dvh;
+  padding:calc(env(safe-area-inset-top,8px) + 8px) 12px 12px;
+  transition:background .4s,color .4s;
+}
+
+/* Night mode (default) */
+body{
+  background:#0c1a22;color:#b0d0d0;
+  --card:rgba(10,28,38,0.65);
+  --border:rgba(100,200,200,0.12);
+  --text:#b0d0d0;--text-bright:#d8f0f0;--text-dim:#5a8888;
+  --accent:#6ecfcf;--green:#5ab880;--green-bg:rgba(90,184,128,0.12);
+  --gold:#d0b060;
+}
+/* Day mode */
+body.day{
+  background:#faf6f0;color:#5a5040;
+  --card:rgba(255,255,255,0.85);
+  --border:rgba(180,160,130,0.18);
+  --text:#5a5040;--text-bright:#2a2420;--text-dim:#a09880;
+  --accent:#d97756;--green:#4a8860;--green-bg:rgba(74,136,96,0.1);
+  --gold:#b89830;
+}
+
+/* Header */
+.w-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:10px;padding:0 2px;
+}
+.w-title{
+  font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:700;
+  color:var(--text-bright);
+}
+.w-date{font-size:.72rem;color:var(--text-dim)}
+.w-count{
+  font-size:.7rem;font-weight:600;color:var(--accent);
+  background:rgba(110,207,207,0.1);padding:3px 10px;border-radius:12px;
+}
+body.day .w-count{background:rgba(217,119,86,0.1)}
+
+/* Task list */
+.w-tasks{display:flex;flex-direction:column;gap:4px}
+.w-task{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:10px 12px;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:10px;
+  transition:opacity .2s;
+}
+.w-task.done{opacity:.4}
+.w-task.done .w-task-text{text-decoration:line-through;color:var(--text-dim)}
+
+.w-check{
+  width:18px;height:18px;border-radius:5px;border:2px solid var(--text-dim);
+  flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;
+  font-size:.7rem;color:transparent;cursor:pointer;
+}
+.w-task.done .w-check{border-color:var(--green);color:var(--green);background:var(--green-bg)}
+
+.w-task-body{flex:1;min-width:0}
+.w-task-text{font-size:.85rem;color:var(--text-bright);line-height:1.3}
+.w-task-meta{display:flex;gap:6px;align-items:center;margin-top:2px}
+.w-task-cat{font-size:.6rem;font-weight:600;text-transform:uppercase;padding:1px 6px;border-radius:8px}
+.w-task-sub{font-size:.62rem;color:var(--text-dim)}
+.w-task-star{color:var(--gold);font-size:.75rem}
+
+/* Subtasks inline */
+.w-subs{margin-top:4px;display:flex;flex-direction:column;gap:2px}
+.w-sub{display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--text)}
+.w-sub.sub-done{opacity:.5;text-decoration:line-through}
+.w-sub-dot{width:5px;height:5px;border-radius:50%;background:var(--text-dim);flex-shrink:0}
+.w-sub.sub-done .w-sub-dot{background:var(--green)}
+
+/* Empty */
+.w-empty{text-align:center;padding:40px 10px;color:var(--text-dim);font-size:.85rem}
+
+/* Open full app link */
+.w-open{
+  display:block;text-align:center;margin-top:12px;
+  font-size:.75rem;color:var(--accent);font-weight:600;
+  text-decoration:none;padding:8px;
+}
+</style>
+</head>
+<body>
+<div class="w-header">
+  <div>
+    <div class="w-title">Cadence</div>
+    <div class="w-date" id="wDate"></div>
+  </div>
+  <div class="w-count" id="wCount"></div>
+</div>
+<div class="w-tasks" id="wTasks"></div>
+<div class="w-empty" id="wEmpty" style="display:none">All clear!</div>
+<a class="w-open" href="./index.html">Open Full App</a>
+
+<script>
+const STORAGE_KEY = 'cadence_data_v1';
+const CATEGORIES = {
+  personal:{label:'Personal',color:'#9078d0'},errands:{label:'Errands',color:'#d97756'},
+  work:{label:'Work',color:'#5a8fd0'},groceries:{label:'Groceries',color:'#5a9870'},
+  health:{label:'Health',color:'#d06090'},home:{label:'Home',color:'#c8a84a'},
+  finance:{label:'Finance',color:'#50b0a0'}
+};
+const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+function titleCase(s){return s.replace(/\b\w/g,c=>c.toUpperCase())}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+// Auto theme (same logic as main app)
+function applyTheme(){
+  const h=new Date().getHours(),m=new Date().getMinutes();
+  const isDay=(h>6&&h<20)||(h===6)||(h===20&&m<30);
+  if(isDay)document.body.classList.add('day');
+  else document.body.classList.remove('day');
+  document.querySelector('meta[name="theme-color"]').content=isDay?'#faf6f0':'#0c1a22';
+}
+
+function render(){
+  applyTheme();
+  let data;
+  try{data=JSON.parse(localStorage.getItem(STORAGE_KEY));if(!data)throw 0;}
+  catch(e){document.getElementById('wEmpty').style.display='';return;}
+
+  const d=new Date();
+  document.getElementById('wDate').textContent=
+    DAYS[d.getDay()]+', '+d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+
+  const active=data.tasks.filter(t=>!t.completedAt);
+  const completed=data.tasks.filter(t=>t.completedAt);
+  // Only show today's completed
+  const today=d.toISOString().split('T')[0];
+  const todayDone=completed.filter(t=>t.completedAt&&t.completedAt.startsWith(today));
+
+  const all=[...active,...todayDone];
+
+  document.getElementById('wCount').textContent=active.length+' task'+(active.length!==1?'s':'');
+
+  if(all.length===0){
+    document.getElementById('wTasks').innerHTML='';
+    document.getElementById('wEmpty').style.display='';
+    return;
+  }
+  document.getElementById('wEmpty').style.display='none';
+
+  document.getElementById('wTasks').innerHTML=all.map(t=>{
+    const isDone=!!t.completedAt;
+    const cat=CATEGORIES[t.category]||CATEGORIES.personal;
+    const subs=(t.subtasks||[]);
+    const subHTML=subs.length?`<div class="w-subs">${subs.map(s=>
+      `<div class="w-sub${s.done?' sub-done':''}"><span class="w-sub-dot"></span>${esc(titleCase(s.text))}</div>`
+    ).join('')}</div>`:'';
+    const doneCount=subs.filter(s=>s.done).length;
+    return `<div class="w-task${isDone?' done':'}" onclick="toggleTask('${t.id}')">
+      <div class="w-check">${isDone?'\u2713':''}</div>
+      <div class="w-task-body">
+        <div class="w-task-text">${esc(titleCase(t.text))}</div>
+        <div class="w-task-meta">
+          <span class="w-task-cat" style="background:${cat.color}20;color:${cat.color}">${cat.label}</span>
+          ${t.priority?'<span class="w-task-star">\u2605</span>':''}
+          ${subs.length?`<span class="w-task-sub">${doneCount}/${subs.length}</span>`:''}
+        </div>
+        ${subHTML}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleTask(id){
+  let data;
+  try{data=JSON.parse(localStorage.getItem(STORAGE_KEY));}catch(e){return;}
+  const task=data.tasks.find(t=>t.id===id);
+  if(!task)return;
+  if(task.completedAt){task.completedAt=null;}
+  else{task.completedAt=new Date().toISOString();}
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
+  render();
+}
+
+render();
+// Refresh every 30 seconds
+setInterval(render,30000);
+</script>
+</body>
+</html>

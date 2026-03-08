@@ -1,7 +1,8 @@
-const CACHE_NAME = 'cadence-v10';
+const CACHE_NAME = 'cadence-v11';
 const ASSETS = [
   './',
   './index.html',
+  './widget.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
