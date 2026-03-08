@@ -913,16 +913,25 @@ function addTask(text, category, opts) {
     fromSuggestion: opts.fromSuggestion || false,
     priority: opts.priority || 0
   };
-  // Insert after the last non-held active task (before held/spacer section)
+  // Insert before any starred/priority tasks, spacers, or held tasks
   let insertIdx = -1;
-  for (let i = data.tasks.length - 1; i >= 0; i--) {
+  for (let i = 0; i < data.tasks.length; i++) {
     const t = data.tasks[i];
-    if (!t.completedAt && !t.hold && !t.isHeader) { insertIdx = i + 1; break; }
+    if (!t.completedAt && (t.priority || t.hold || t.isHeader)) {
+      insertIdx = i;
+      break;
+    }
   }
   if (insertIdx >= 0) {
     data.tasks.splice(insertIdx, 0, task);
   } else {
-    data.tasks.unshift(task);
+    // No starred/held/spacer tasks — add at end of active tasks
+    let lastActive = -1;
+    for (let i = data.tasks.length - 1; i >= 0; i--) {
+      if (!data.tasks[i].completedAt) { lastActive = i + 1; break; }
+    }
+    if (lastActive >= 0) data.tasks.splice(lastActive, 0, task);
+    else data.tasks.unshift(task);
   }
   saveData();
   renderTasks();
