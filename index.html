@@ -2503,8 +2503,16 @@ function init() {
   renderTemplateSuggestions();
   checkMonthlyAutoLoad();
 
-  // Load from cloud (restore if local is empty)
+  // Always pull latest from cloud on open
   loadFromCloud();
+
+  // Auto-pull from cloud every 30 seconds (picks up changes from other devices)
+  setInterval(function() { loadFromCloud(); }, 30000);
+
+  // Also pull from cloud when app regains focus (switching back from another tab/app)
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) loadFromCloud();
+  });
 
   // Register service worker
   if ('serviceWorker' in navigator) {
