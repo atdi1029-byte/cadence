@@ -1902,6 +1902,35 @@ function renderSettings() {
     </div>
 
     <div class="insight-card">
+      <div class="insight-title">Cloud Sync</div>
+      <div class="setting-row">
+        <div style="flex:1">
+          <div class="setting-label">Apps Script URL</div>
+          <div class="setting-desc">Paste your deployed web app URL for cloud backup</div>
+          <input class="form-input" id="settingSyncUrl" value="${esc(localStorage.getItem('cadence_sync_url')||'')}"
+                 placeholder="https://script.google.com/macros/s/.../exec" style="margin-top:6px;font-size:.75rem"
+                 onchange="localStorage.setItem('cadence_sync_url',this.value.trim());toast('Sync URL saved — reload app to activate')">
+        </div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Sync Now</div>
+          <div class="setting-desc">Push current data to cloud</div>
+        </div>
+        <button class="form-btn form-btn-outline" style="width:auto;padding:6px 14px;font-size:.8rem"
+                onclick="syncToCloud();toast('Syncing to cloud...')">Sync</button>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Restore from Cloud</div>
+          <div class="setting-desc">Pull data from cloud backup</div>
+        </div>
+        <button class="form-btn form-btn-outline" style="width:auto;padding:6px 14px;font-size:.8rem"
+                onclick="loadFromCloud()">Restore</button>
+      </div>
+    </div>
+
+    <div class="insight-card">
       <div class="insight-title">Data</div>
       <div class="setting-row">
         <div>
@@ -1988,6 +2017,80 @@ function clearHistory() {
   toast('History cleared');
 }
 
+// ===== CLOUD SYNC =====
+// Set this to your deployed Apps Script URL after deploying apps_script.gs
+const SYNC_ENDPOINT = localStorage.getItem('cadence_sync_url') || '';
+
+function fireGet(url) {
+  const img = new Image();
+  img.src = url;
+}
+
+function syncToCloud() {
+  if (!SYNC_ENDPOINT) return;
+  const encoded = encodeURIComponent(JSON.stringify(data));
+  // Google Apps Script URL param limit ~7000 chars
+  if (encoded.length > 7000) {
+    // For large data, strip history to fit
+    const lite = Object.assign({}, data, {history: data.history.slice(-200)});
+    const liteEnc = encodeURIComponent(JSON.stringify(lite));
+    if (liteEnc.length > 7000) return; // too big even trimmed
+    fireGet(SYNC_ENDPOINT + '?action=save&data=' + liteEnc);
+  } else {
+    fireGet(SYNC_ENDPOINT + '?action=save&data=' + encoded);
+  }
+}
+
+function loadFromCloud() {
+  if (!SYNC_ENDPOINT) return;
+  fetch(SYNC_ENDPOINT + '?action=load')
+    .then(r => r.json())
+    .then(resp => {
+      if (!resp.ok || !resp.data) return;
+      let cloud;
+      try { cloud = JSON.parse(resp.data); } catch(e) { return; }
+      if (!cloud || !cloud.tasks) return;
+
+      // Merge: if local is empty (just got wiped), take cloud wholesale
+      const localTasks = data.tasks.length;
+      const localFreq = Object.keys(data.freq).length;
+      if (localTasks === 0 && localFreq === 0 && cloud.tasks.length > 0) {
+        // Local is empty, cloud has data — restore from cloud
+        data = cloud;
+        saveData();
+        renderTasks();
+        renderSuggestions();
+        renderTemplateSuggestions();
+        if (currentView === 'insights') renderInsights();
+        if (currentView === 'settings') renderSettings();
+        toast('Restored from cloud backup');
+        return;
+      }
+
+      // Otherwise, merge cloud templates we don't have locally
+      if (cloud.templates) {
+        for (const ct of cloud.templates) {
+          if (!data.templates.find(t => t.id === ct.id)) {
+            data.templates.push(ct);
+          }
+        }
+      }
+      // Merge settings name if local is empty
+      if (!data.settings.name && cloud.settings && cloud.settings.name) {
+        data.settings.name = cloud.settings.name;
+      }
+      saveData();
+    })
+    .catch(() => {}); // fail silently if offline
+}
+
+// Auto-sync after every save
+const _origSaveData = saveData;
+saveData = function() {
+  _origSaveData();
+  syncToCloud();
+};
+
 // ===== INITIALIZATION =====
 function init() {
   loadData();
@@ -1997,6 +2100,9 @@ function init() {
   renderTasks();
   renderSuggestions();
   renderTemplateSuggestions();
+
+  // Load from cloud (restore if local is empty)
+  loadFromCloud();
 
   // Register service worker
   if ('serviceWorker' in navigator) {
