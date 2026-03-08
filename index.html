@@ -22,9 +22,9 @@ a{text-decoration:none;color:inherit}
 
 /* ===== CSS VARIABLES — Night Mode (default) — teal & orange ===== */
 :root{
-  --bg:#2e2218;
-  --bg-grad:linear-gradient(145deg,#2e2218 0%,#302520 30%,#2a1e14 60%,#2e2218 100%);
-  --card:rgba(40,30,20,0.6);
+  --bg:#0c1a22;
+  --bg-grad:linear-gradient(145deg,#0c1a22 0%,#0a2028 30%,#081820 60%,#0c1a22 100%);
+  --card:rgba(10,28,38,0.65);
   --card-border:rgba(100,200,200,0.12);
   --card-shadow:0 2px 16px rgba(0,0,0,0.35),0 0 40px rgba(80,180,180,0.04);
   --input-bg:rgba(8,22,30,0.8);
@@ -107,6 +107,7 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
   width:100vw;height:100vh;
   object-fit:cover;object-position:center;
   opacity:0.6;pointer-events:none;z-index:0;
+  filter:brightness(1.6) contrast(1.2);
   transition:opacity .6s;
 }
 :root.day .bg-mascot{opacity:0.09}
