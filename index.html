@@ -1141,7 +1141,7 @@ function taskCardHTML(task, isCompleted) {
       <div class="swipe-act swipe-del">Delete</div>
     </div>
     <div class="drag-handle" data-id="${task.id}">&#8942;</div>
-    <div class="task-check" onclick="completeTask('${task.id}')">${isCompleted?'\u2713':''}</div>
+    ${subs.length ? '' : `<div class="task-check" onclick="completeTask('${task.id}')">${isCompleted?'\u2713':''}</div>`}
     <div class="task-body" onclick="openEditModal('${task.id}')">
       <div class="task-text">${esc(titleCase(task.text))}</div>
       <div class="task-meta">
