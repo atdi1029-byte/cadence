@@ -113,8 +113,8 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
   background:var(--nav-bg);
   backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
   border-bottom:1px solid var(--nav-border);
-  display:flex;align-items:center;justify-content:space-between;
-  transition:background .6s;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transition:background .6s;text-align:center;
 }
 .app-header h1{
   font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:700;
@@ -549,7 +549,7 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 
     <!-- Empty state -->
     <div class="empty-state" id="emptyState">
-      <div class="empty-icon">&#9745;</div>
+      <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg></div>
       <div class="empty-text">No tasks yet.<br>Type above to add your first task.</div>
     </div>
   </div>
@@ -561,7 +561,7 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
     <div class="tmpl-add-btn" onclick="openTemplateModal()">+ New Routine</div>
     <div id="routinesList"></div>
     <div class="empty-state" id="routinesEmpty">
-      <div class="empty-icon">&#128203;</div>
+      <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg></div>
       <div class="empty-text">No routines yet.<br>Create one to auto-fill recurring tasks.</div>
     </div>
   </div>
