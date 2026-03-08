@@ -333,6 +333,18 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 }
 .task-time{font-size:.72rem;color:var(--text-dim)}
 .task-priority{color:var(--gold);font-size:.85rem}
+.task-till{
+  font-size:.68rem;font-weight:600;color:var(--accent);
+  background:var(--pill-bg);border:1px solid var(--pill-border);
+  padding:2px 8px;border-radius:10px;cursor:pointer;
+  white-space:nowrap;
+}
+.task-till-add{
+  font-size:.62rem;color:var(--text-dim);cursor:pointer;
+  border:1px dashed var(--card-border);padding:1px 7px;border-radius:10px;
+  opacity:.6;transition:opacity .2s;
+}
+.task-till-add:hover,.task-till-add:active{opacity:1}
 
 /* ===== BOTTOM NAV ===== */
 .bottom-nav{
@@ -998,6 +1010,7 @@ function taskCardHTML(task, isCompleted) {
         <span class="task-cat" style="${catStyle}">${cat.label}</span>
         ${task.dueTime ? `<span class="task-time">${task.dueTime}</span>` : ''}
         ${task.priority ? '<span class="task-priority">\u2605</span>' : ''}
+        ${task.tillTime ? `<span class="task-till" onclick="event.stopPropagation();promptTill('${task.id}')">till ${esc(task.tillTime)}</span>` : `<span class="task-till-add" onclick="event.stopPropagation();promptTill('${task.id}')">till</span>`}
         ${subMeta}
       </div>
       ${subHTML}
@@ -1059,6 +1072,21 @@ function attachSwipe(card, taskId) {
 }
 
 // ===== SUBTASKS =====
+function promptTill(taskId) {
+  const task = data.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  const current = task.tillTime || '';
+  const val = prompt('Till what time?', current);
+  if (val === null) return; // cancelled
+  if (val.trim() === '') {
+    delete task.tillTime;
+  } else {
+    task.tillTime = val.trim();
+  }
+  saveData();
+  renderTasks();
+}
+
 function toggleSubtask(taskId, subIndex) {
   const task = data.tasks.find(t => t.id === taskId);
   if (!task || !task.subtasks) return;
