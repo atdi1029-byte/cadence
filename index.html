@@ -1068,11 +1068,7 @@ function renderTasks() {
   const twoMinsAgo = new Date(Date.now() - 120000).toISOString();
   const completed = data.tasks.filter(t => t.completedAt && t.completedAt >= twoMinsAgo);
 
-  // Keep array order (user's manual drag order), just float priority items to top
-  active.sort((a, b) => {
-    if (a.priority !== b.priority) return b.priority - a.priority;
-    return 0; // preserve existing order
-  });
+  // Respect user's manual drag order — stars are visual only, no auto-sort
 
   // Sort completed by completion time (newest first)
   completed.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
