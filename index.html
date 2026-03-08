@@ -350,15 +350,9 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 
 /* Spacer dividers */
 .section-spacer{
-  display:flex;align-items:center;gap:8px;
-  padding:6px 12px;
+  display:flex;align-items:center;
+  min-height:48px;padding:0 12px;
 }
-.spacer-line{flex:1;height:1px;background:var(--card-border)}
-.section-x{
-  font-size:.85rem;color:var(--text-dim);cursor:pointer;opacity:.3;
-  padding:0 2px;transition:opacity .2s;
-}
-.section-x:active{opacity:1}
 
 /* ===== BOTTOM NAV ===== */
 .bottom-nav{
@@ -1016,9 +1010,7 @@ function renderTasks() {
 function taskCardHTML(task, isCompleted) {
   if (task.isHeader) {
     return `<div class="section-spacer" id="card-${task.id}" data-id="${task.id}">
-      <div class="drag-handle" data-id="${task.id}">&#8942;</div>
-      <div class="spacer-line"></div>
-      <span class="section-x" onclick="deleteTask('${task.id}')">&times;</span>
+      <div class="drag-handle" data-id="${task.id}" style="opacity:.15">&#8942;</div>
     </div>`;
   }
   const cat = CATEGORIES[task.category] || CATEGORIES.personal;
@@ -1137,7 +1129,8 @@ function toggleSubtask(taskId, subIndex) {
 
 // ===== DRAG & REORDER =====
 function initDrag(taskList) {
-  const cards = Array.from(taskList.querySelectorAll('.task-card:not(.completed-card)'));
+  const DRAG_SEL = '.task-card:not(.completed-card), .section-spacer';
+  const cards = Array.from(taskList.querySelectorAll(DRAG_SEL));
   if (cards.length < 2) return;
 
   cards.forEach(card => {
@@ -1147,7 +1140,6 @@ function initDrag(taskList) {
     let startY = 0, currentY = 0, dragging = false;
     let placeholder = null;
     let cardRect = null;
-    let siblings = [];
 
     handle.addEventListener('touchstart', function(e) {
       e.preventDefault();
@@ -1156,15 +1148,6 @@ function initDrag(taskList) {
       startY = e.touches[0].clientY;
       currentY = startY;
       cardRect = card.getBoundingClientRect();
-
-      // Collect sibling positions before we start moving
-      siblings = Array.from(taskList.querySelectorAll('.task-card:not(.completed-card)')).map(c => ({
-        el: c,
-        id: c.dataset.id,
-        top: c.getBoundingClientRect().top,
-        mid: c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2,
-        height: c.getBoundingClientRect().height
-      }));
 
       // Create placeholder
       placeholder = document.createElement('div');
@@ -1188,17 +1171,11 @@ function initDrag(taskList) {
       e.preventDefault();
       currentY = e.touches[0].clientY;
       const dy = currentY - startY;
-
-      // Move the floating card
       card.style.top = (cardRect.top + dy) + 'px';
 
-      // Figure out where the placeholder should go based on finger position
-      // Hide the card temporarily to find what's under it
       const fingerY = currentY;
-
-      // Find the sibling we're hovering over (using original positions + any shift)
       let insertBefore = null;
-      const currentCards = Array.from(taskList.querySelectorAll('.task-card:not(.completed-card)'));
+      const currentCards = Array.from(taskList.querySelectorAll(DRAG_SEL));
       for (const sib of currentCards) {
         if (sib === card) continue;
         const r = sib.getBoundingClientRect();
@@ -1208,11 +1185,9 @@ function initDrag(taskList) {
         }
       }
 
-      // Move placeholder
       if (insertBefore) {
         taskList.insertBefore(placeholder, insertBefore);
       } else {
-        // Append after last non-completed card
         const lastActive = currentCards.filter(c => c !== card).pop();
         if (lastActive && lastActive.nextSibling) {
           taskList.insertBefore(placeholder, lastActive.nextSibling);
@@ -1226,7 +1201,6 @@ function initDrag(taskList) {
       if (!dragging) return;
       dragging = false;
 
-      // Reset card styles
       card.style.position = '';
       card.style.top = '';
       card.style.left = '';
@@ -1237,14 +1211,12 @@ function initDrag(taskList) {
       card.style.boxShadow = '';
       card.style.transform = '';
 
-      // Insert card where placeholder is
       if (placeholder && placeholder.parentNode) {
         placeholder.parentNode.insertBefore(card, placeholder);
         placeholder.remove();
       }
 
-      // Now read the new DOM order and save it to data
-      const newOrder = Array.from(taskList.querySelectorAll('.task-card:not(.completed-card)')).map(c => c.dataset.id);
+      const newOrder = Array.from(taskList.querySelectorAll(DRAG_SEL)).map(c => c.dataset.id);
       reorderTasks(newOrder);
     }, {passive: true});
   });
