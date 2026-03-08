@@ -299,6 +299,20 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 .subtask-text{font-size:.8rem;color:var(--text)}
 .task-sub-count{font-size:.68rem;color:var(--text-dim);background:var(--pill-bg);padding:1px 6px;border-radius:8px}
 
+/* Pill groups (eat / shave / shower) */
+.pill-group{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+.pill-item{
+  padding:6px 14px;border-radius:20px;font-size:.8rem;font-weight:500;
+  background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--text-bright);cursor:pointer;transition:all .2s;
+  user-select:none;-webkit-user-select:none;
+}
+.pill-item:active{transform:scale(.94)}
+.pill-item.pill-done{
+  opacity:.45;text-decoration:line-through;
+  border-color:var(--green);background:var(--green-bg);color:var(--green);
+}
+
 /* Checkbox */
 .task-check{
   width:22px;height:22px;border-radius:6px;border:2px solid var(--text-dim);
@@ -817,7 +831,31 @@ function addTaskFromInput() {
   const input = document.getElementById('taskInput');
   const text = input.value.trim();
   if (!text) return;
-  // Check if freq has a matching entry to inherit category
+
+  // Check for grouped items: "eat / shave / shower"
+  if (text.includes('/')) {
+    const items = text.split('/').map(s => s.trim()).filter(s => s);
+    if (items.length >= 2) {
+      // Create a single task with pills (stored as subtasks, rendered as pills)
+      const groupName = items.join(' / ');
+      const key = groupName.toLowerCase();
+      const freqEntry = data.freq[key];
+      const cat = freqEntry ? freqEntry.category : selectedCategory;
+      const task = addTask(groupName, cat);
+      // Auto-create subtasks from the items
+      task.subtasks = items.map(item => ({text: item, done: false}));
+      task.isPillGroup = true;
+      saveData();
+      renderTasks();
+      input.value = '';
+      document.getElementById('autocomplete').classList.remove('open');
+      acIndex = -1;
+      toast(items.length + ' items added as group');
+      return;
+    }
+  }
+
+  // Normal single task
   const key = text.toLowerCase();
   const freqEntry = data.freq[key];
   const cat = freqEntry ? freqEntry.category : selectedCategory;
@@ -934,12 +972,18 @@ function taskCardHTML(task, isCompleted) {
   const catStyle = `background:${cat.color}20;color:${cat.color}`;
   const subs = (task.subtasks || []);
   const doneCount = subs.filter(s => s.done).length;
-  const subHTML = subs.length ? `<div class="subtask-list">${subs.map((s, i) =>
-    `<div class="subtask${s.done?' subtask-done':''}" onclick="event.stopPropagation();toggleSubtask('${task.id}',${i})">
-      <span class="subtask-check">${s.done?'\u2713':''}</span>
-      <span class="subtask-text">${esc(titleCase(s.text))}</span>
-    </div>`).join('')}
-    </div>` : '';
+  let subHTML = '';
+  if (subs.length && task.isPillGroup) {
+    subHTML = `<div class="pill-group">${subs.map((s, i) =>
+      `<span class="pill-item${s.done?' pill-done':''}" onclick="event.stopPropagation();toggleSubtask('${task.id}',${i})">${esc(titleCase(s.text))}</span>`
+    ).join('')}</div>`;
+  } else if (subs.length) {
+    subHTML = `<div class="subtask-list">${subs.map((s, i) =>
+      `<div class="subtask${s.done?' subtask-done':''}" onclick="event.stopPropagation();toggleSubtask('${task.id}',${i})">
+        <span class="subtask-check">${s.done?'\u2713':''}</span>
+        <span class="subtask-text">${esc(titleCase(s.text))}</span>
+      </div>`).join('')}</div>`;
+  }
   const subMeta = subs.length ? `<span class="task-sub-count">${doneCount}/${subs.length}</span>` : '';
   return `<div class="task-card${isCompleted?' completed-card':''}" id="card-${task.id}" data-id="${task.id}" draggable="false">
     <div class="swipe-actions">
@@ -1019,6 +1063,12 @@ function toggleSubtask(taskId, subIndex) {
   const task = data.tasks.find(t => t.id === taskId);
   if (!task || !task.subtasks) return;
   task.subtasks[subIndex].done = !task.subtasks[subIndex].done;
+  // Auto-complete pill group when all pills are done
+  if (task.isPillGroup && task.subtasks.every(s => s.done) && !task.completedAt) {
+    task.completedAt = new Date().toISOString();
+    recordCompletion(task);
+    toast('All done!');
+  }
   saveData();
   renderTasks();
 }
@@ -1271,6 +1321,8 @@ function recordCompletion(task) {
 
   entry.lastDone = dateStr(now);
   entry.category = task.category;
+  entry.textOriginal = task.text;
+  if (task.isPillGroup) entry.isPillGroup = true;
   data.freq[key] = entry;
 
   // History
@@ -1428,7 +1480,18 @@ function renderSuggestions() {
 }
 
 function addFromSuggestion(key, category, text) {
-  addTask(text, category, {fromSuggestion: true});
+  const freqEntry = data.freq[key];
+  const task = addTask(text, category, {fromSuggestion: true});
+  // Restore pill group if the original was one
+  if (freqEntry && freqEntry.isPillGroup && text.includes('/')) {
+    const items = text.split('/').map(s => s.trim()).filter(s => s);
+    if (items.length >= 2) {
+      task.subtasks = items.map(item => ({text: item, done: false}));
+      task.isPillGroup = true;
+      saveData();
+      renderTasks();
+    }
+  }
   toast('Added from suggestion');
 }
 
