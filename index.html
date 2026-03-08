@@ -105,7 +105,7 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 .bg-mascot{
   position:fixed;top:0;left:0;
   width:100vw;height:100vh;
-  object-fit:cover;object-position:top center;
+  object-fit:contain;object-position:top center;width:100vw;
   opacity:0.6;pointer-events:none;z-index:0;
   transition:opacity .6s;
 }
@@ -1055,7 +1055,8 @@ function togglePriority(id) {
 // ===== RENDER TASKS =====
 function renderTasks() {
   const active = data.tasks.filter(t => !t.completedAt);
-  const completed = data.tasks.filter(t => t.completedAt);
+  const twoMinsAgo = new Date(Date.now() - 120000).toISOString();
+  const completed = data.tasks.filter(t => t.completedAt && t.completedAt >= twoMinsAgo);
 
   // Keep array order (user's manual drag order), just float priority items to top
   active.sort((a, b) => {
