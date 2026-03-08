@@ -889,13 +889,10 @@ function renderTasks() {
   const active = data.tasks.filter(t => !t.completedAt);
   const completed = data.tasks.filter(t => t.completedAt);
 
-  // Sort active tasks
-  const order = data.settings.sortOrder || 'priority';
+  // Keep array order (user's manual drag order), just float priority items to top
   active.sort((a, b) => {
-    if (order === 'priority') {
-      if (a.priority !== b.priority) return b.priority - a.priority;
-    }
-    return new Date(a.createdAt) - new Date(b.createdAt);
+    if (a.priority !== b.priority) return b.priority - a.priority;
+    return 0; // preserve existing order
   });
 
   // Sort completed by completion time (newest first)
@@ -1027,88 +1024,134 @@ function toggleSubtask(taskId, subIndex) {
 }
 
 // ===== DRAG & REORDER =====
-let dragSrcId = null;
-
 function initDrag(taskList) {
-  const cards = taskList.querySelectorAll('.task-card');
+  const cards = Array.from(taskList.querySelectorAll('.task-card:not(.completed-card)'));
+  if (cards.length < 2) return;
+
   cards.forEach(card => {
     const handle = card.querySelector('.drag-handle');
     if (!handle) return;
 
-    // Touch-based drag
-    let dragClone = null, startY = 0, startIdx = 0, cardH = 0;
-    let moved = false;
+    let startY = 0, currentY = 0, dragging = false;
+    let placeholder = null;
+    let cardRect = null;
+    let siblings = [];
 
     handle.addEventListener('touchstart', function(e) {
       e.preventDefault();
-      dragSrcId = handle.dataset.id;
+      e.stopPropagation();
+      dragging = true;
       startY = e.touches[0].clientY;
-      cardH = card.offsetHeight + 6; // gap included
-      card.classList.add('dragging');
-      moved = false;
+      currentY = startY;
+      cardRect = card.getBoundingClientRect();
 
-      // Find start index among active tasks
-      const ids = getActiveTaskOrder();
-      startIdx = ids.indexOf(dragSrcId);
+      // Collect sibling positions before we start moving
+      siblings = Array.from(taskList.querySelectorAll('.task-card:not(.completed-card)')).map(c => ({
+        el: c,
+        id: c.dataset.id,
+        top: c.getBoundingClientRect().top,
+        mid: c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2,
+        height: c.getBoundingClientRect().height
+      }));
+
+      // Create placeholder
+      placeholder = document.createElement('div');
+      placeholder.style.cssText = `height:${cardRect.height}px;border:2px dashed var(--accent);border-radius:var(--radius);opacity:0.3;margin:3px 0;transition:none`;
+      card.parentNode.insertBefore(placeholder, card);
+
+      // Float the card
+      card.style.position = 'fixed';
+      card.style.top = cardRect.top + 'px';
+      card.style.left = cardRect.left + 'px';
+      card.style.width = cardRect.width + 'px';
+      card.style.zIndex = '50';
+      card.style.transition = 'none';
+      card.style.opacity = '0.85';
+      card.style.boxShadow = '0 8px 30px rgba(0,0,0,0.3)';
+      card.style.transform = 'scale(1.02)';
     }, {passive: false});
 
     handle.addEventListener('touchmove', function(e) {
-      if (!dragSrcId) return;
+      if (!dragging) return;
       e.preventDefault();
-      moved = true;
-      const dy = e.touches[0].clientY - startY;
-      card.style.transform = `translateY(${dy}px) scale(.97)`;
-      card.style.zIndex = '10';
-      card.style.position = 'relative';
+      currentY = e.touches[0].clientY;
+      const dy = currentY - startY;
 
-      // Highlight drop target
-      const allCards = taskList.querySelectorAll('.task-card:not(.completed-card)');
-      allCards.forEach(c => c.classList.remove('drag-over'));
-      const overCard = document.elementFromPoint(
-        e.touches[0].clientX, e.touches[0].clientY
-      );
-      const target = overCard ? overCard.closest('.task-card') : null;
-      if (target && target !== card && !target.classList.contains('completed-card')) {
-        target.classList.add('drag-over');
+      // Move the floating card
+      card.style.top = (cardRect.top + dy) + 'px';
+
+      // Figure out where the placeholder should go based on finger position
+      // Hide the card temporarily to find what's under it
+      const fingerY = currentY;
+
+      // Find the sibling we're hovering over (using original positions + any shift)
+      let insertBefore = null;
+      const currentCards = Array.from(taskList.querySelectorAll('.task-card:not(.completed-card)'));
+      for (const sib of currentCards) {
+        if (sib === card) continue;
+        const r = sib.getBoundingClientRect();
+        if (fingerY < r.top + r.height / 2) {
+          insertBefore = sib;
+          break;
+        }
+      }
+
+      // Move placeholder
+      if (insertBefore) {
+        taskList.insertBefore(placeholder, insertBefore);
+      } else {
+        // Append after last non-completed card
+        const lastActive = currentCards.filter(c => c !== card).pop();
+        if (lastActive && lastActive.nextSibling) {
+          taskList.insertBefore(placeholder, lastActive.nextSibling);
+        } else {
+          taskList.appendChild(placeholder);
+        }
       }
     }, {passive: false});
 
     handle.addEventListener('touchend', function(e) {
-      if (!dragSrcId) return;
-      card.classList.remove('dragging');
-      card.style.transform = '';
-      card.style.zIndex = '';
+      if (!dragging) return;
+      dragging = false;
+
+      // Reset card styles
       card.style.position = '';
+      card.style.top = '';
+      card.style.left = '';
+      card.style.width = '';
+      card.style.zIndex = '';
+      card.style.transition = '';
+      card.style.opacity = '';
+      card.style.boxShadow = '';
+      card.style.transform = '';
 
-      // Find drop target
-      const allCards = taskList.querySelectorAll('.task-card');
-      let dropTarget = null;
-      allCards.forEach(c => {
-        if (c.classList.contains('drag-over')) dropTarget = c;
-        c.classList.remove('drag-over');
-      });
-
-      if (dropTarget && moved) {
-        reorderTask(dragSrcId, dropTarget.dataset.id);
+      // Insert card where placeholder is
+      if (placeholder && placeholder.parentNode) {
+        placeholder.parentNode.insertBefore(card, placeholder);
+        placeholder.remove();
       }
-      dragSrcId = null;
+
+      // Now read the new DOM order and save it to data
+      const newOrder = Array.from(taskList.querySelectorAll('.task-card:not(.completed-card)')).map(c => c.dataset.id);
+      reorderTasks(newOrder);
     }, {passive: true});
   });
 }
 
-function getActiveTaskOrder() {
-  return data.tasks.filter(t => !t.completedAt).map(t => t.id);
-}
-
-function reorderTask(srcId, destId) {
-  const srcIdx = data.tasks.findIndex(t => t.id === srcId);
-  const destIdx = data.tasks.findIndex(t => t.id === destId);
-  if (srcIdx < 0 || destIdx < 0 || srcIdx === destIdx) return;
-  const [moved] = data.tasks.splice(srcIdx, 1);
-  const newDestIdx = data.tasks.findIndex(t => t.id === destId);
-  data.tasks.splice(newDestIdx, 0, moved);
+function reorderTasks(newIdOrder) {
+  // Separate active and completed tasks
+  const completed = data.tasks.filter(t => t.completedAt);
+  const reordered = [];
+  for (const id of newIdOrder) {
+    const task = data.tasks.find(t => t.id === id);
+    if (task) reordered.push(task);
+  }
+  // Add any active tasks not in the new order (safety)
+  for (const t of data.tasks) {
+    if (!t.completedAt && !reordered.includes(t)) reordered.push(t);
+  }
+  data.tasks = [...reordered, ...completed];
   saveData();
-  renderTasks();
 }
 
 // ===== EDIT TASK MODAL =====
