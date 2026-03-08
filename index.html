@@ -2407,6 +2407,9 @@ function jsonpFetch(url, callback) {
 }
 
 let _syncTimer = null;
+let _lastLocalSave = 0;   // timestamp of last local save
+let _savePending = false;  // true while save is in flight
+
 function syncToCloud() {
   const ep = getSyncUrl();
   if (!ep) return;
@@ -2417,15 +2420,24 @@ function syncToCloud() {
 function _doSync() {
   const ep = getSyncUrl();
   if (!ep) return;
+  _savePending = true;
   let payload = JSON.stringify(data);
   if (payload.length > 6000) {
     const lite = Object.assign({}, data, {history: data.history.slice(-100)});
     payload = JSON.stringify(lite);
   }
   const url = ep + '?action=save&data=' + encodeURIComponent(payload);
-  // fireGet is reliable for saves (fire-and-forget via Image tag)
-  fireGet(url);
-  console.log('Cloud sync sent');
+  // Use JSONP for save too — confirms delivery
+  jsonpFetch(url, function(err, resp) {
+    _savePending = false;
+    if (err) { console.warn('Cloud save failed:', err); return; }
+    if (resp && resp.ok) {
+      _lastLocalSave = Date.now();
+      console.log('Cloud sync OK');
+    } else {
+      console.warn('Cloud save error:', resp && resp.error);
+    }
+  });
 }
 
 function loadFromCloud(showToast) {
@@ -2434,6 +2446,11 @@ function loadFromCloud(showToast) {
     if (showToast) toast('No sync URL set');
     return;
   }
+  // Don't overwrite local changes while a save is pending
+  if (_savePending) return;
+  // Don't pull if we saved very recently (give cloud time to update)
+  if (Date.now() - _lastLocalSave < 5000) return;
+
   if (showToast) toast('Loading from cloud...');
   jsonpFetch(ep + '?action=load', function(err, resp) {
     if (err) {
@@ -2458,22 +2475,9 @@ function loadFromCloud(showToast) {
       return;
     }
 
-    // If local is empty, take cloud wholesale
-    const localTasks = data.tasks.length;
-    const localFreq = Object.keys(data.freq).length;
-    if (localTasks === 0 && localFreq === 0 && cloud.tasks.length > 0) {
-      data = cloud;
-      _origSaveData();
-      renderTasks();
-      renderSuggestions();
-      renderTemplateSuggestions();
-      if (currentView === 'insights') renderInsights();
-      if (currentView === 'settings') renderSettings();
-      toast('Restored ' + cloud.tasks.length + ' tasks from cloud');
-      return;
-    }
+    // Skip if cloud data is identical to local
+    if (JSON.stringify(data.tasks) === JSON.stringify(cloud.tasks)) return;
 
-    // Otherwise, always take the cloud version (most recent wins)
     data = cloud;
     _origSaveData();
     renderTasks();
