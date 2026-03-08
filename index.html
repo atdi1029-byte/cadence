@@ -339,12 +339,6 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
   padding:2px 8px;border-radius:10px;cursor:pointer;
   white-space:nowrap;
 }
-.task-till-add{
-  font-size:.62rem;color:var(--text-dim);cursor:pointer;
-  border:1px dashed var(--card-border);padding:1px 7px;border-radius:10px;
-  opacity:.6;transition:opacity .2s;
-}
-.task-till-add:hover,.task-till-add:active{opacity:1}
 
 /* ===== BOTTOM NAV ===== */
 .bottom-nav{
@@ -1010,7 +1004,7 @@ function taskCardHTML(task, isCompleted) {
         <span class="task-cat" style="${catStyle}">${cat.label}</span>
         ${task.dueTime ? `<span class="task-time">${task.dueTime}</span>` : ''}
         ${task.priority ? '<span class="task-priority">\u2605</span>' : ''}
-        ${task.tillTime ? `<span class="task-till" onclick="event.stopPropagation();promptTill('${task.id}')">till ${esc(task.tillTime)}</span>` : `<span class="task-till-add" onclick="event.stopPropagation();promptTill('${task.id}')">till</span>`}
+        ${task.tillTime ? `<span class="task-till">till ${esc(task.tillTime)}</span>` : ''}
         ${subMeta}
       </div>
       ${subHTML}
@@ -1072,21 +1066,6 @@ function attachSwipe(card, taskId) {
 }
 
 // ===== SUBTASKS =====
-function promptTill(taskId) {
-  const task = data.tasks.find(t => t.id === taskId);
-  if (!task) return;
-  const current = task.tillTime || '';
-  const val = prompt('Till what time?', current);
-  if (val === null) return; // cancelled
-  if (val.trim() === '') {
-    delete task.tillTime;
-  } else {
-    task.tillTime = val.trim();
-  }
-  saveData();
-  renderTasks();
-}
-
 function toggleSubtask(taskId, subIndex) {
   const task = data.tasks.find(t => t.id === taskId);
   if (!task || !task.subtasks) return;
@@ -1266,6 +1245,10 @@ function openEditModal(id) {
       <div class="toggle${task.priority?' on':''}" id="editPriority" onclick="this.classList.toggle('on')"></div>
     </div>
     <div class="form-group">
+      <label class="form-label">Till</label>
+      <input class="form-input" id="editTill" placeholder="e.g. 11, 12:15, 3pm" value="${esc(task.tillTime||'')}">
+    </div>
+    <div class="form-group">
       <label class="form-label">Subtasks</label>
       <div id="editSubs" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${subsHTML}</div>
       <div style="display:flex;gap:6px">
@@ -1300,6 +1283,8 @@ function saveEdit(id) {
   task.category = document.getElementById('editCat').value;
   task.dueTime = document.getElementById('editTime').value || null;
   task.priority = document.getElementById('editPriority').classList.contains('on') ? 1 : 0;
+  const tillVal = document.getElementById('editTill').value.trim();
+  task.tillTime = tillVal || null;
   // Collect subtasks
   const oldSubs = task.subtasks || [];
   const newSubs = [];
