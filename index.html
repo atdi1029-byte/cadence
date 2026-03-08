@@ -845,7 +845,17 @@ function addTask(text, category, opts) {
     fromSuggestion: opts.fromSuggestion || false,
     priority: opts.priority || 0
   };
-  data.tasks.push(task);
+  // Insert after the last non-held active task (before held/spacer section)
+  let insertIdx = -1;
+  for (let i = data.tasks.length - 1; i >= 0; i--) {
+    const t = data.tasks[i];
+    if (!t.completedAt && !t.hold && !t.isHeader) { insertIdx = i + 1; break; }
+  }
+  if (insertIdx >= 0) {
+    data.tasks.splice(insertIdx, 0, task);
+  } else {
+    data.tasks.unshift(task);
+  }
   saveData();
   renderTasks();
   renderSuggestions();
