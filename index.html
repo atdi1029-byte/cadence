@@ -333,6 +333,10 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 }
 .task-time{font-size:.72rem;color:var(--text-dim)}
 .task-priority{color:var(--gold);font-size:.85rem}
+.task-hold{
+  font-size:.62rem;font-weight:600;color:var(--gold);
+  background:rgba(208,176,96,0.12);padding:1px 7px;border-radius:8px;
+}
 .task-till{
   font-size:.68rem;font-weight:600;color:var(--accent);
   background:var(--pill-bg);border:1px solid var(--pill-border);
@@ -1004,6 +1008,7 @@ function taskCardHTML(task, isCompleted) {
         <span class="task-cat" style="${catStyle}">${cat.label}</span>
         ${task.dueTime ? `<span class="task-time">${task.dueTime}</span>` : ''}
         ${task.priority ? '<span class="task-priority">\u2605</span>' : ''}
+        ${task.hold ? '<span class="task-hold">hold</span>' : ''}
         ${task.tillTime ? `<span class="task-till">till ${esc(task.tillTime)}</span>` : ''}
         ${subMeta}
       </div>
@@ -1245,6 +1250,13 @@ function openEditModal(id) {
       <div class="toggle${task.priority?' on':''}" id="editPriority" onclick="this.classList.toggle('on')"></div>
     </div>
     <div class="form-group">
+      <label class="form-label">Hold</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="toggle${task.hold?' on':''}" id="editHold" onclick="this.classList.toggle('on')"></div>
+        <span style="font-size:.72rem;color:var(--text-dim)">Keeps task even after completed</span>
+      </div>
+    </div>
+    <div class="form-group">
       <label class="form-label">Till</label>
       <input class="form-input" id="editTill" placeholder="e.g. 11, 12:15, 3pm" value="${esc(task.tillTime||'')}">
     </div>
@@ -1283,6 +1295,7 @@ function saveEdit(id) {
   task.category = document.getElementById('editCat').value;
   task.dueTime = document.getElementById('editTime').value || null;
   task.priority = document.getElementById('editPriority').classList.contains('on') ? 1 : 0;
+  task.hold = document.getElementById('editHold').classList.contains('on') ? 1 : 0;
   const tillVal = document.getElementById('editTill').value.trim();
   task.tillTime = tillVal || null;
   // Collect subtasks
@@ -1383,6 +1396,7 @@ function pruneHistory() {
   // Also clean completed tasks older than 24h
   data.tasks = data.tasks.filter(t => {
     if (!t.completedAt) return true;
+    if (t.hold) return true;
     return new Date(t.completedAt) > new Date(Date.now() - 86400000);
   });
   saveData();
