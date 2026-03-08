@@ -628,6 +628,9 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
     <!-- Task List -->
     <div class="task-section-label" id="activeLabel" style="display:none">Tasks</div>
     <div class="task-list" id="taskList"></div>
+    <div style="text-align:right;margin-top:4px">
+      <button class="spacer-btn" onclick="addSpacer(true)">+ space</button>
+    </div>
 
     <div class="task-section-label" id="completedLabel" style="display:none">Completed</div>
     <div class="task-list" id="completedList"></div>
@@ -991,7 +994,7 @@ function addTaskFromInput() {
   toast('Task added');
 }
 
-function addSpacer() {
+function addSpacer(bottom) {
   const task = {
     id: genId('t'),
     text: '---',
@@ -1000,7 +1003,11 @@ function addSpacer() {
     completedAt: null,
     isHeader: true
   };
-  data.tasks.unshift(task);
+  if (bottom) {
+    data.tasks.push(task);
+  } else {
+    data.tasks.unshift(task);
+  }
   saveData();
   renderTasks();
   renderSuggestions();
