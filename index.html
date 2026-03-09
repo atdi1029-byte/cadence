@@ -330,9 +330,10 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 /* Drag handle */
 .drag-handle{
   color:var(--text-dim);font-size:1.1rem;cursor:grab;
-  padding:2px 2px 2px 0;flex-shrink:0;touch-action:none;
+  padding:2px 0 2px 2px;flex-shrink:0;touch-action:none;
   opacity:.4;transition:opacity .2s;user-select:none;
   display:flex;align-items:center;letter-spacing:-2px;
+  margin-left:auto;
 }
 .drag-handle:active{cursor:grabbing;opacity:.8}
 .task-card.dragging{opacity:.4;transform:scale(.97);transition:opacity .15s,transform .15s}
@@ -1155,7 +1156,6 @@ function taskCardHTML(task, isCompleted) {
       <div class="swipe-act swipe-done">Done</div>
       <div class="swipe-act swipe-del">Delete</div>
     </div>
-    <div class="drag-handle" data-id="${task.id}">&#8942;</div>
     ${subs.length ? '' : `<div class="task-check" onclick="completeTask('${task.id}')">${isCompleted?'\u2713':''}</div>`}
     <div class="task-body" onclick="openEditModal('${task.id}')">
       <div class="task-text">${esc(titleCase(task.text))}</div>
@@ -1168,6 +1168,7 @@ function taskCardHTML(task, isCompleted) {
     </div>
     ${task.dueTime ? `<div class="task-time">${fmt12(task.dueTime)}</div>` : ''}
     ${task.hold ? '<span class="task-hold-star">\u2605</span>' : ''}
+    <div class="drag-handle" data-id="${task.id}">&#8942;</div>
   </div>`;
 }
 
@@ -1281,7 +1282,7 @@ function initDrag(taskList) {
       card.style.transition = 'none';
       card.style.opacity = '0.85';
       card.style.boxShadow = '0 8px 30px rgba(0,0,0,0.3)';
-      card.style.transform = 'scale(1.02)';
+      card.style.transform = 'none';
     }
 
     function onDragMove(clientY) {
@@ -1374,6 +1375,7 @@ function reorderTasks(newIdOrder) {
   }
   data.tasks = [...reordered, ...completed];
   saveData();
+  renderTasks();
 }
 
 // ===== EDIT TASK MODAL =====
