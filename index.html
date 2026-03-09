@@ -2304,7 +2304,7 @@ function renderSettings() {
           <div class="setting-desc">Push current data to cloud</div>
         </div>
         <button class="form-btn form-btn-outline" style="width:auto;padding:6px 14px;font-size:.8rem"
-                onclick="_doSync();toast('Syncing...')">Sync</button>
+                onclick="_doSync(true)">Push to Cloud</button>
       </div>
       <div class="setting-row">
         <div>
@@ -2446,20 +2446,21 @@ function syncToCloud() {
   _syncTimer = setTimeout(_doSync, 2000);
 }
 
-function _doSync() {
+function _doSync(showFeedback) {
   _syncTimer = null; // clear so auto-loads can resume after sync completes
   const ep = getSyncUrl();
-  if (!ep) return;
+  if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
   let payload = JSON.stringify(data);
   if (payload.length > 6000) {
     const lite = Object.assign({}, data, {history: data.history.slice(-100)});
     payload = JSON.stringify(lite);
   }
+  if (showFeedback) toast('Pushing ' + data.tasks.length + ' tasks to cloud...');
   const url = ep + '?action=save&data=' + encodeURIComponent(payload);
   jsonpFetch(url, function(err, resp) {
-    if (err) { console.log('Cloud save failed:', err); return; }
-    if (resp && resp.ok) { console.log('Cloud save confirmed'); }
-    else { console.log('Cloud save error:', resp); }
+    if (err) { console.log('Cloud save failed:', err); if (showFeedback) toast('Cloud save FAILED: ' + err); return; }
+    if (resp && resp.ok) { console.log('Cloud save confirmed'); if (showFeedback) toast('Cloud save confirmed!'); }
+    else { console.log('Cloud save error:', resp); if (showFeedback) toast('Cloud save error'); }
   });
 }
 
