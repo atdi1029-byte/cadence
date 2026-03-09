@@ -2447,7 +2447,7 @@ function syncToCloud() {
 }
 
 function _doSync(showFeedback) {
-  _syncTimer = null; // clear so auto-loads can resume after sync completes
+  _syncTimer = null;
   const ep = getSyncUrl();
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
   let payload = JSON.stringify(data);
@@ -2455,12 +2455,15 @@ function _doSync(showFeedback) {
     const lite = Object.assign({}, data, {history: data.history.slice(-100)});
     payload = JSON.stringify(lite);
   }
-  if (showFeedback) toast('Pushing ' + data.tasks.length + ' tasks to cloud...');
-  const url = ep + '?action=save&data=' + encodeURIComponent(payload);
-  jsonpFetch(url, function(err, resp) {
-    if (err) { console.log('Cloud save failed:', err); if (showFeedback) toast('Cloud save FAILED: ' + err); return; }
-    if (resp && resp.ok) { console.log('Cloud save confirmed'); if (showFeedback) toast('Cloud save confirmed!'); }
-    else { console.log('Cloud save error:', resp); if (showFeedback) toast('Cloud save error'); }
+  var url = ep + '?action=save&data=' + encodeURIComponent(payload);
+  console.log('Cloud save URL length:', url.length);
+  if (showFeedback) toast('Pushing ' + data.tasks.length + ' tasks (' + url.length + ' chars)...');
+  fetch(url, {mode:'no-cors'}).then(function() {
+    console.log('Cloud save request sent');
+    if (showFeedback) toast('Data pushed to cloud! Hit Restore to verify.');
+  }).catch(function(e) {
+    console.log('Cloud save network error:', e);
+    if (showFeedback) toast('Push failed: ' + e.message);
   });
 }
 
