@@ -2456,8 +2456,11 @@ function _doSync() {
     payload = JSON.stringify(lite);
   }
   const url = ep + '?action=save&data=' + encodeURIComponent(payload);
-  fireGet(url);
-  console.log('Cloud sync sent');
+  jsonpFetch(url, function(err, resp) {
+    if (err) { console.log('Cloud save failed:', err); return; }
+    if (resp && resp.ok) { console.log('Cloud save confirmed'); }
+    else { console.log('Cloud save error:', resp); }
+  });
 }
 
 function loadFromCloud(showToast) {
@@ -2500,7 +2503,8 @@ function loadFromCloud(showToast) {
     if (JSON.stringify(data.tasks) === JSON.stringify(cloud.tasks)) return;
 
     // Don't overwrite local data if it's newer than cloud data
-    if (!showToast && data.lastModified && cloud.lastModified && data.lastModified >= cloud.lastModified) return;
+    // If local has lastModified but cloud doesn't, local is newer (cloud is pre-timestamp)
+    if (!showToast && data.lastModified && (!cloud.lastModified || data.lastModified >= cloud.lastModified)) return;
 
     data = cloud;
     _origSaveData();
