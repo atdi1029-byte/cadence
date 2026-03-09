@@ -1178,7 +1178,7 @@ function esc(s) {
 }
 
 function titleCase(s) {
-  return s.replace(/\b\w/g, c => c.toUpperCase());
+  return s.replace(/(^|\s)\S/g, c => c.toUpperCase());
 }
 
 function fmt12(t) {
