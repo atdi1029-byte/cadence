@@ -2446,6 +2446,7 @@ function syncToCloud() {
 }
 
 function _doSync() {
+  _syncTimer = null; // clear so auto-loads can resume after sync completes
   const ep = getSyncUrl();
   if (!ep) return;
   let payload = JSON.stringify(data);
@@ -2468,7 +2469,10 @@ function loadFromCloud(showToast) {
   if (!showToast && (_syncTimer || Date.now() - _lastLocalSave < 15000)) return;
 
   if (showToast) toast('Loading from cloud...');
+  const loadStartedAt = _lastLocalSave; // snapshot before JSONP fires
   jsonpFetch(ep + '?action=load', function(err, resp) {
+    // If user made local changes while JSONP was in-flight, don't overwrite
+    if (!showToast && _lastLocalSave > loadStartedAt) return;
     if (err) {
       if (showToast) toast('Cloud fetch failed: ' + err);
       return;
