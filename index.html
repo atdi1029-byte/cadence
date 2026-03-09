@@ -769,7 +769,6 @@ function loadData() {
 
 function saveData() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  syncToCloud();
 }
 
 // ===== THEME =====
@@ -2465,8 +2464,8 @@ function loadFromCloud(showToast) {
     if (showToast) toast('No sync URL set');
     return;
   }
-  // Don't pull from cloud within 10s of a local save
-  if (!showToast && Date.now() - _lastLocalSave < 10000) return;
+  // Don't pull from cloud if there's a pending sync or within 15s of a local save
+  if (!showToast && (_syncTimer || Date.now() - _lastLocalSave < 15000)) return;
 
   if (showToast) toast('Loading from cloud...');
   jsonpFetch(ep + '?action=load', function(err, resp) {
