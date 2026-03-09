@@ -218,7 +218,7 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
   color:rgba(232,148,76,0.8);white-space:nowrap;cursor:pointer;
   transition:all .2s;flex-shrink:0;position:relative;
 }
-:root.day .s-pill{color:#000;background:rgba(217,119,86,0.15);border-color:rgba(217,119,86,0.3)}
+:root.day .s-pill{color:var(--text-bright);background:var(--pill-bg);border-color:var(--pill-border)}
 .s-pill:active{transform:scale(.95)}
 .s-pill .s-reason{
   display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
@@ -1449,6 +1449,11 @@ function saveEdit(id) {
   task.dueTime = document.getElementById('editTime').value || null;
   task.priority = document.getElementById('editPriority').classList.contains('on') ? 1 : 0;
   task.hold = document.getElementById('editHold').classList.contains('on') ? 1 : 0;
+  // Auto-add pending subtask from input
+  const pendingSub = document.getElementById('editNewSub');
+  if (pendingSub && pendingSub.value.trim()) {
+    addEditSub();
+  }
   // Collect subtasks
   const oldSubs = task.subtasks || [];
   const newSubs = [];
