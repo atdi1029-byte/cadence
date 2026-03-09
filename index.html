@@ -768,6 +768,7 @@ function loadData() {
 }
 
 function saveData() {
+  data.lastModified = Date.now();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
@@ -2497,6 +2498,9 @@ function loadFromCloud(showToast) {
 
     // Skip if cloud data is identical to local
     if (JSON.stringify(data.tasks) === JSON.stringify(cloud.tasks)) return;
+
+    // Don't overwrite local data if it's newer than cloud data
+    if (!showToast && data.lastModified && cloud.lastModified && data.lastModified >= cloud.lastModified) return;
 
     data = cloud;
     _origSaveData();
