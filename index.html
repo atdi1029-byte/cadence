@@ -1215,6 +1215,7 @@ function attachSwipe(card, taskId) {
 
   card.addEventListener('touchend', function(e) {
     card.style.transition = 'transform .2s';
+    if (card._dragging) { card.style.transform = 'translateX(0)'; swiping = false; return; }
     const dx = e.changedTouches[0].clientX - startX;
     if (dx < -100) {
       // Full swipe — complete or delete
@@ -1263,6 +1264,7 @@ function initDrag(taskList) {
 
     function onDragStart(clientY) {
       dragging = true;
+      card._dragging = true;
       startY = clientY;
       currentY = startY;
       cardRect = card.getBoundingClientRect();
@@ -1314,6 +1316,7 @@ function initDrag(taskList) {
     function onDragEnd() {
       if (!dragging) return;
       dragging = false;
+      setTimeout(() => { card._dragging = false; }, 50);
 
       card.style.position = '';
       card.style.top = '';
