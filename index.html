@@ -2113,7 +2113,7 @@ function renderWeekly() {
     const val = getWeeklyVal(i.id);
     const pct = Math.min(100, Math.round((val / i.target) * 100));
     const done = val >= i.target;
-    const label = i.unit === 'hrs' ? (val + '/' + i.target + ' hrs') : (val + '/' + i.target);
+    const label = i.unit === 'times' ? (val + '/' + i.target) : (val + '/' + i.target + ' ' + i.unit);
     return '<div class="weekly-item' + (done ? ' w-done' : '') + '">' +
       '<div class="weekly-item-info" onclick="logWeeklyProgress(\'' + i.id + '\')">' +
         '<div class="weekly-item-top">' +
@@ -2133,9 +2133,10 @@ function logWeeklyProgress(itemId) {
   const wk = getWeekKey();
   if (!data.weekly.log[wk]) data.weekly.log[wk] = {};
 
-  if (item.unit === 'hrs') {
+  if (item.unit === 'hrs' || item.unit === 'mins') {
     const current = data.weekly.log[wk][itemId] || 0;
-    const input = prompt('Log hours for ' + item.text + ' (current: ' + current + '/' + item.target + ')', '1');
+    const unitLabel = item.unit === 'hrs' ? 'hours' : 'minutes';
+    const input = prompt('Log ' + unitLabel + ' for ' + item.text + ' (current: ' + current + '/' + item.target + ')', item.unit === 'mins' ? '30' : '1');
     if (input === null) return;
     const val = parseFloat(input);
     if (isNaN(val) || val <= 0) return;
@@ -2179,7 +2180,9 @@ function deleteWeeklyItem(itemId) {
 
 function toggleWeeklyUnit() {
   const btn = document.getElementById('weeklyUnitBtn');
-  btn.textContent = btn.textContent === 'times' ? 'hrs' : 'times';
+  const order = ['times', 'hrs', 'mins'];
+  const idx = order.indexOf(btn.textContent);
+  btn.textContent = order[(idx + 1) % order.length];
 }
 
 function toggleWeeklyOpen() {
