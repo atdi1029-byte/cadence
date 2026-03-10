@@ -2462,8 +2462,17 @@ function _doSync(showFeedback) {
   }
   var url = ep + '?action=save&data=' + encodeURIComponent(payload);
   if (showFeedback) toast('Pushing ' + data.tasks.length + ' tasks...');
-  fireGet(url);
-  if (showFeedback) setTimeout(function() { toast('Data pushed to cloud'); }, 1500);
+  fetch(url).then(function(resp) {
+    return resp.json();
+  }).then(function(resp) {
+    if (resp && resp.ok) {
+      if (showFeedback) toast('Saved ' + data.tasks.length + ' tasks to cloud');
+    } else {
+      if (showFeedback) toast('Cloud save error: ' + ((resp && resp.error) || 'unknown'));
+    }
+  }).catch(function(e) {
+    if (showFeedback) toast('Cloud save failed: ' + e.message);
+  });
 }
 
 function loadFromCloud(showToast) {
@@ -2476,14 +2485,11 @@ function loadFromCloud(showToast) {
   if (!showToast && (_syncTimer || Date.now() - _lastLocalSave < 15000)) return;
 
   if (showToast) toast('Loading from cloud...');
-  const loadStartedAt = _lastLocalSave; // snapshot before JSONP fires
-  jsonpFetch(ep + '?action=load', function(err, resp) {
-    // If user made local changes while JSONP was in-flight, don't overwrite
+  const loadStartedAt = _lastLocalSave;
+  fetch(ep + '?action=load').then(function(resp) {
+    return resp.json();
+  }).then(function(resp) {
     if (!showToast && _lastLocalSave > loadStartedAt) return;
-    if (err) {
-      if (showToast) toast('Cloud fetch failed: ' + err);
-      return;
-    }
     if (!resp || !resp.ok) {
       if (showToast) toast('Cloud error: ' + ((resp && resp.error) || 'unknown'));
       return;
@@ -2501,12 +2507,10 @@ function loadFromCloud(showToast) {
       if (showToast) toast('Cloud data invalid');
       return;
     }
-
-    // Skip if cloud data is identical to local
-    if (JSON.stringify(data.tasks) === JSON.stringify(cloud.tasks)) return;
-
-    // Don't overwrite local data if it's newer than cloud data
-    // If local has lastModified but cloud doesn't, local is newer (cloud is pre-timestamp)
+    if (JSON.stringify(data.tasks) === JSON.stringify(cloud.tasks)) {
+      if (showToast) toast('Already up to date');
+      return;
+    }
     if (!showToast && data.lastModified && (!cloud.lastModified || data.lastModified >= cloud.lastModified)) return;
 
     data = cloud;
@@ -2517,6 +2521,8 @@ function loadFromCloud(showToast) {
     if (currentView === 'insights') renderInsights();
     if (currentView === 'settings') renderSettings();
     if (showToast) toast('Synced ' + cloud.tasks.length + ' tasks from cloud');
+  }).catch(function(e) {
+    if (showToast) toast('Cloud fetch failed: ' + e.message);
   });
 }
 
