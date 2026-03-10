@@ -2702,9 +2702,11 @@ function loadFromCloud(showToast) {
 
   if (showToast) toast('Loading from cloud...');
   const loadStartedAt = _lastLocalSave;
-  fetch(ep + '?action=load').then(function(resp) {
-    return resp.json();
-  }).then(function(resp) {
+  jsonpFetch(ep + '?action=load', function(err, resp) {
+    if (err) {
+      if (showToast) toast('Cloud fetch failed: ' + err);
+      return;
+    }
     if (!showToast && _lastLocalSave > loadStartedAt) return;
     if (!resp || !resp.ok) {
       if (showToast) toast('Cloud error: ' + ((resp && resp.error) || 'unknown'));
@@ -2715,7 +2717,7 @@ function loadFromCloud(showToast) {
       return;
     }
     let cloud;
-    try { cloud = JSON.parse(resp.data); } catch(e) {
+    try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {
       if (showToast) toast('Cloud data corrupted');
       return;
     }
@@ -2737,8 +2739,6 @@ function loadFromCloud(showToast) {
     if (currentView === 'insights') renderInsights();
     if (currentView === 'settings') renderSettings();
     if (showToast) toast('Synced ' + cloud.tasks.length + ' tasks from cloud');
-  }).catch(function(e) {
-    if (showToast) toast('Cloud fetch failed: ' + e.message);
   });
 }
 

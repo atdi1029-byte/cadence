@@ -11,17 +11,26 @@ var TIMESTAMP_CELL = 'B1';   // last sync timestamp
 
 function doGet(e) {
   var action = (e.parameter.action || '').toLowerCase();
+  var callback = e.parameter.callback || '';
 
+  var result;
   if (action === 'load') {
-    return handleLoad();
-  }
-  if (action === 'save') {
-    return handleSave(e.parameter.data || '');
+    result = handleLoad();
+  } else if (action === 'save') {
+    result = handleSave(e.parameter.data || '');
+  } else {
+    result = ContentService.createTextOutput(
+      JSON.stringify({ok: false, error: 'Unknown action'})
+    ).setMimeType(ContentService.MimeType.JSON);
   }
 
-  return ContentService.createTextOutput(
-    JSON.stringify({ok: false, error: 'Unknown action'})
-  ).setMimeType(ContentService.MimeType.JSON);
+  // JSONP support — wrap in callback for CORS-free loading
+  if (callback) {
+    var json = result.getContent();
+    return ContentService.createTextOutput(callback + '(' + json + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return result;
 }
 
 function doPost(e) {
