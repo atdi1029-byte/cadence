@@ -2456,15 +2456,9 @@ function _doSync(showFeedback) {
     payload = JSON.stringify(lite);
   }
   var url = ep + '?action=save&data=' + encodeURIComponent(payload);
-  console.log('Cloud save URL length:', url.length);
-  if (showFeedback) toast('Pushing ' + data.tasks.length + ' tasks (' + url.length + ' chars)...');
-  fetch(url, {mode:'no-cors'}).then(function() {
-    console.log('Cloud save request sent');
-    if (showFeedback) toast('Data pushed to cloud! Hit Restore to verify.');
-  }).catch(function(e) {
-    console.log('Cloud save network error:', e);
-    if (showFeedback) toast('Push failed: ' + e.message);
-  });
+  if (showFeedback) toast('Pushing ' + data.tasks.length + ' tasks...');
+  fireGet(url);
+  if (showFeedback) setTimeout(function() { toast('Data pushed to cloud'); }, 1500);
 }
 
 function loadFromCloud(showToast) {
