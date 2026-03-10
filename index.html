@@ -246,6 +246,63 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 }
 
 /* ===== MONTHLY TO-DO ===== */
+/* ===== WEEKLY GOALS ===== */
+.weekly-section{
+  margin-top:20px;background:var(--card);border:1px solid var(--card-border);
+  border-radius:var(--radius);overflow:hidden;
+}
+.weekly-header{
+  display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;
+  transition:background .2s;
+}
+.weekly-header:active{background:rgba(255,255,255,0.03)}
+.weekly-title-row{display:flex;align-items:center;gap:8px;flex:1}
+.weekly-icon{display:flex;align-items:center;color:var(--accent)}
+.weekly-title{font-size:.85rem;font-weight:700;color:var(--text-bright);text-transform:uppercase;letter-spacing:.05em}
+.weekly-week{font-size:.72rem;color:var(--text-dim);font-weight:500}
+.weekly-progress{font-size:.7rem;font-weight:600;color:var(--green);padding:2px 8px;border-radius:10px;background:var(--green-bg)}
+.weekly-chevron{font-size:.6rem;color:var(--text-dim);transition:transform .2s}
+.weekly-chevron.collapsed{transform:rotate(-90deg)}
+.weekly-body{padding:0 16px 14px}
+.weekly-body.collapsed{display:none}
+.weekly-items{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.weekly-item{
+  display:flex;align-items:center;gap:10px;padding:10px 0;
+  border-bottom:1px solid var(--card-border);
+}
+.weekly-item:last-child{border-bottom:none}
+.weekly-item-info{flex:1;display:flex;flex-direction:column;gap:4px;cursor:pointer}
+.weekly-item-top{display:flex;align-items:center;gap:8px}
+.weekly-item-text{font-size:.85rem;color:var(--text-bright);font-weight:500}
+.weekly-item-count{font-size:.75rem;font-weight:600;color:var(--accent)}
+.weekly-item.w-done .weekly-item-count{color:var(--green)}
+.weekly-item.w-done .weekly-item-text{color:var(--green);opacity:.8}
+.weekly-bar{height:4px;border-radius:2px;background:var(--card-border);overflow:hidden}
+.weekly-bar-fill{height:100%;border-radius:2px;background:var(--accent);transition:width .3s}
+.weekly-item.w-done .weekly-bar-fill{background:var(--green)}
+.weekly-item-del{color:var(--text-dim);font-size:.9rem;cursor:pointer;padding:4px 6px;opacity:.5;transition:opacity .2s}
+.weekly-item-del:active{opacity:1}
+.weekly-add{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.weekly-add-name{
+  flex:1;min-width:100px;padding:8px 12px;border-radius:var(--radius-sm);
+  background:var(--input-bg);border:1px solid var(--card-border);
+  color:var(--text-bright);font-size:.82rem;
+}
+.weekly-add-target{
+  width:50px;padding:8px;border-radius:var(--radius-sm);text-align:center;
+  background:var(--input-bg);border:1px solid var(--card-border);
+  color:var(--text-bright);font-size:.82rem;
+}
+.weekly-add-unit{
+  padding:8px 10px;border-radius:var(--radius-sm);
+  background:var(--input-bg);border:1px solid var(--card-border);
+  color:var(--accent);font-size:.78rem;font-weight:600;cursor:pointer;
+}
+.weekly-add-btn{
+  width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;
+  font-size:1.1rem;font-weight:700;display:flex;align-items:center;justify-content:center;
+}
+
 .monthly-section{
   margin-top:20px;background:var(--card);border:1px solid var(--card-border);
   border-radius:var(--radius);overflow:hidden;
@@ -655,6 +712,28 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
       <div class="empty-text">No routines yet.<br>Create one to auto-fill recurring tasks.</div>
     </div>
 
+    <!-- Weekly Goals -->
+    <div class="weekly-section" id="weeklySection">
+      <div class="weekly-header" onclick="toggleWeeklyOpen()">
+        <div class="weekly-title-row">
+          <span class="weekly-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+          <span class="weekly-title">Weekly</span>
+          <span class="weekly-week" id="weeklyWeek"></span>
+        </div>
+        <div class="weekly-progress" id="weeklyProgress"></div>
+        <span class="weekly-chevron" id="weeklyChevron">&#x25BC;</span>
+      </div>
+      <div class="weekly-body" id="weeklyBody">
+        <div class="weekly-items" id="weeklyItems"></div>
+        <div class="weekly-add">
+          <input type="text" id="weeklyNameInput" placeholder="Goal name..." class="weekly-add-name" onkeydown="if(event.key==='Enter')addWeeklyItem()">
+          <input type="number" id="weeklyTargetInput" placeholder="#" class="weekly-add-target" min="1" value="1">
+          <button class="weekly-add-unit" id="weeklyUnitBtn" onclick="toggleWeeklyUnit()">times</button>
+          <button class="weekly-add-btn" onclick="addWeeklyItem()">+</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Monthly To-Do -->
     <div class="monthly-section" id="monthlySection">
       <div class="monthly-header" onclick="toggleMonthlyOpen()">
@@ -747,6 +826,7 @@ function loadData() {
     if (!data.freq) data.freq = {};
     if (!data.templates) data.templates = [];
     if (!data.monthly) data.monthly = {items:[], done:{}};
+    if (!data.weekly) data.weekly = {items:[], log:{}};
     if (!data.settings) data.settings = {};
   } catch(e) {
     data = {
@@ -755,6 +835,7 @@ function loadData() {
       freq: {},
       templates: [],
       monthly: {items:[], done:{}},
+      weekly: {items:[], log:{}},
       settings: {
         name: '',
         defaultCategory: 'personal',
@@ -834,7 +915,7 @@ function showView(viewId, btn) {
   }
   currentView = viewId;
   if (viewId === 'today') { renderTasks(); renderSuggestions(); renderTemplateSuggestions(); }
-  if (viewId === 'routines') { renderRoutines(); renderMonthly(); }
+  if (viewId === 'routines') { renderRoutines(); renderWeekly(); renderMonthly(); }
   if (viewId === 'insights') renderInsights();
   if (viewId === 'settings') renderSettings();
 }
@@ -1981,6 +2062,132 @@ function loadTemplate(id) {
   renderTasks();
   renderTemplateSuggestions();
   toast(added + ' tasks added from ' + tmpl.name);
+}
+
+// ===== WEEKLY GOALS =====
+function getWeekKey() {
+  const d = new Date();
+  const jan1 = new Date(d.getFullYear(), 0, 1);
+  const days = Math.floor((d - jan1) / 86400000);
+  const week = Math.ceil((days + jan1.getDay() + 1) / 7);
+  return d.getFullYear() + '-W' + String(week).padStart(2, '0');
+}
+
+function getWeekLabel() {
+  const d = new Date();
+  const day = d.getDay();
+  const mon = new Date(d); mon.setDate(d.getDate() - ((day + 6) % 7));
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  const fmt = function(dt) { return dt.toLocaleDateString('en-US', {month:'short', day:'numeric'}); };
+  return fmt(mon) + ' – ' + fmt(sun);
+}
+
+function getWeeklyVal(itemId) {
+  const wk = getWeekKey();
+  return (data.weekly.log[wk] && data.weekly.log[wk][itemId]) || 0;
+}
+
+function renderWeekly() {
+  const items = data.weekly.items || [];
+  document.getElementById('weeklyWeek').textContent = getWeekLabel();
+
+  // Progress
+  const metCount = items.filter(function(i) { return getWeeklyVal(i.id) >= i.target; }).length;
+  const progEl = document.getElementById('weeklyProgress');
+  progEl.textContent = items.length ? metCount + '/' + items.length : '';
+
+  // Collapse state
+  const collapsed = localStorage.getItem('cadence_weekly_collapsed') === '1';
+  const body = document.getElementById('weeklyBody');
+  const chev = document.getElementById('weeklyChevron');
+  if (collapsed) { body.classList.add('collapsed'); chev.classList.add('collapsed'); }
+  else { body.classList.remove('collapsed'); chev.classList.remove('collapsed'); }
+
+  // Render items
+  const el = document.getElementById('weeklyItems');
+  if (items.length === 0) {
+    el.innerHTML = '<div style="font-size:.78rem;color:var(--text-dim);padding:8px 0">No weekly goals yet. Add things like gym, reading, running...</div>';
+    return;
+  }
+  el.innerHTML = items.map(function(i) {
+    const val = getWeeklyVal(i.id);
+    const pct = Math.min(100, Math.round((val / i.target) * 100));
+    const done = val >= i.target;
+    const label = i.unit === 'hrs' ? (val + '/' + i.target + ' hrs') : (val + '/' + i.target);
+    return '<div class="weekly-item' + (done ? ' w-done' : '') + '">' +
+      '<div class="weekly-item-info" onclick="logWeeklyProgress(\'' + i.id + '\')">' +
+        '<div class="weekly-item-top">' +
+          '<span class="weekly-item-text">' + esc(titleCase(i.text)) + '</span>' +
+          '<span class="weekly-item-count">' + label + '</span>' +
+        '</div>' +
+        '<div class="weekly-bar"><div class="weekly-bar-fill" style="width:' + pct + '%"></div></div>' +
+      '</div>' +
+      '<div class="weekly-item-del" onclick="deleteWeeklyItem(\'' + i.id + '\')">\u00D7</div>' +
+    '</div>';
+  }).join('');
+}
+
+function logWeeklyProgress(itemId) {
+  const item = data.weekly.items.find(function(i) { return i.id === itemId; });
+  if (!item) return;
+  const wk = getWeekKey();
+  if (!data.weekly.log[wk]) data.weekly.log[wk] = {};
+
+  if (item.unit === 'hrs') {
+    const current = data.weekly.log[wk][itemId] || 0;
+    const input = prompt('Log hours for ' + item.text + ' (current: ' + current + '/' + item.target + ')', '1');
+    if (input === null) return;
+    const val = parseFloat(input);
+    if (isNaN(val) || val <= 0) return;
+    data.weekly.log[wk][itemId] = Math.round((current + val) * 10) / 10;
+  } else {
+    data.weekly.log[wk][itemId] = (data.weekly.log[wk][itemId] || 0) + 1;
+  }
+
+  // Clean old weeks (keep last 4)
+  const keys = Object.keys(data.weekly.log).sort();
+  while (keys.length > 4) { delete data.weekly.log[keys.shift()]; }
+  saveData();
+  renderWeekly();
+  const newVal = data.weekly.log[wk][itemId];
+  if (newVal >= item.target) toast(item.text + ' goal met!');
+}
+
+function addWeeklyItem() {
+  const nameInput = document.getElementById('weeklyNameInput');
+  const targetInput = document.getElementById('weeklyTargetInput');
+  const unitBtn = document.getElementById('weeklyUnitBtn');
+  const text = nameInput.value.trim();
+  if (!text) return;
+  const target = parseInt(targetInput.value) || 1;
+  const unit = unitBtn.textContent;
+  const id = 'w' + Date.now();
+  data.weekly.items.push({id: id, text: text, target: target, unit: unit});
+  saveData();
+  nameInput.value = '';
+  targetInput.value = '1';
+  renderWeekly();
+  toast('Weekly goal added');
+}
+
+function deleteWeeklyItem(itemId) {
+  data.weekly.items = data.weekly.items.filter(function(i) { return i.id !== itemId; });
+  saveData();
+  renderWeekly();
+  toast('Weekly goal removed');
+}
+
+function toggleWeeklyUnit() {
+  const btn = document.getElementById('weeklyUnitBtn');
+  btn.textContent = btn.textContent === 'times' ? 'hrs' : 'times';
+}
+
+function toggleWeeklyOpen() {
+  const body = document.getElementById('weeklyBody');
+  const chev = document.getElementById('weeklyChevron');
+  body.classList.toggle('collapsed');
+  chev.classList.toggle('collapsed');
+  localStorage.setItem('cadence_weekly_collapsed', body.classList.contains('collapsed') ? '1' : '');
 }
 
 // ===== MONTHLY TO-DO =====
