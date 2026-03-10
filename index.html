@@ -1243,12 +1243,12 @@ function taskCardHTML(task, isCompleted) {
       <div class="task-text">${esc(titleCase(task.text))}</div>
       <div class="task-meta">
         <span class="task-cat" style="${catStyle}">${cat.label}</span>
-        ${task.priority ? '<span class="task-priority">\u2605</span>' : ''}
         ${subMeta}
       </div>
       ${subHTML}
     </div>
     ${task.dueTime ? `<div class="task-time">${fmt12(task.dueTime)}</div>` : ''}
+    ${task.priority && !task.hold ? '<span class="task-hold-star">\u2605</span>' : ''}
     ${task.hold ? '<span class="task-hold-star">\u2605</span>' : ''}
     <div class="drag-handle" data-id="${task.id}">&#8942;</div>
   </div>`;
