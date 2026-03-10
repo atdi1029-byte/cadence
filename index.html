@@ -2620,7 +2620,7 @@ function clearHistory() {
   if (!confirm('Clear all task history? This will reset your smart suggestions.')) return;
   data.history = [];
   data.freq = {};
-  saveData();
+  _origSaveData(); // save locally only — don't sync cleared history to cloud
   renderInsights();
   toast('History cleared');
 }
@@ -2664,8 +2664,10 @@ function jsonpFetch(url, callback) {
 
 let _syncTimer = null;
 let _lastLocalSave = 0;
+let syncReady = false;
 
 function syncToCloud() {
+  if (!syncReady) return;
   const ep = getSyncUrl();
   if (!ep) return;
   _lastLocalSave = Date.now();
@@ -2677,6 +2679,8 @@ function _doSync(showFeedback) {
   _syncTimer = null;
   const ep = getSyncUrl();
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
+  // Safety: never push empty tasks to cloud (prevents accidental data wipe)
+  if (!showFeedback && (!data.tasks || data.tasks.length === 0)) return;
   let payload = JSON.stringify(data);
   if (showFeedback) toast('Pushing ' + data.tasks.length + ' tasks...');
   fetch(ep, {
@@ -2691,45 +2695,55 @@ function _doSync(showFeedback) {
   });
 }
 
-function loadFromCloud(showToast) {
+function loadFromCloud(showToast, onComplete) {
   const ep = getSyncUrl();
   if (!ep) {
     if (showToast) toast('No sync URL set');
+    if (onComplete) onComplete();
     return;
   }
   // Don't pull from cloud if there's a pending sync or within 15s of a local save
-  if (!showToast && (_syncTimer || Date.now() - _lastLocalSave < 15000)) return;
+  if (!showToast && (_syncTimer || Date.now() - _lastLocalSave < 15000)) {
+    if (onComplete) onComplete();
+    return;
+  }
 
   if (showToast) toast('Loading from cloud...');
   const loadStartedAt = _lastLocalSave;
   jsonpFetch(ep + '?action=load', function(err, resp) {
     if (err) {
       if (showToast) toast('Cloud fetch failed: ' + err);
+      if (onComplete) onComplete();
       return;
     }
-    if (!showToast && _lastLocalSave > loadStartedAt) return;
+    if (!showToast && _lastLocalSave > loadStartedAt) { if (onComplete) onComplete(); return; }
     if (!resp || !resp.ok) {
       if (showToast) toast('Cloud error: ' + ((resp && resp.error) || 'unknown'));
+      if (onComplete) onComplete();
       return;
     }
     if (!resp.data) {
       if (showToast) toast('Cloud is empty — nothing to restore');
+      if (onComplete) onComplete();
       return;
     }
     let cloud;
     try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {
       if (showToast) toast('Cloud data corrupted');
+      if (onComplete) onComplete();
       return;
     }
     if (!cloud || !cloud.tasks) {
       if (showToast) toast('Cloud data invalid');
+      if (onComplete) onComplete();
       return;
     }
     if (JSON.stringify(data.tasks) === JSON.stringify(cloud.tasks)) {
       if (showToast) toast('Already up to date');
+      if (onComplete) onComplete();
       return;
     }
-    if (!showToast && data.lastModified && (!cloud.lastModified || data.lastModified >= cloud.lastModified)) return;
+    if (!showToast && data.lastModified && (!cloud.lastModified || data.lastModified >= cloud.lastModified)) { if (onComplete) onComplete(); return; }
 
     data = cloud;
     _origSaveData();
@@ -2739,6 +2753,7 @@ function loadFromCloud(showToast) {
     if (currentView === 'insights') renderInsights();
     if (currentView === 'settings') renderSettings();
     if (showToast) toast('Synced ' + cloud.tasks.length + ' tasks from cloud');
+    if (onComplete) onComplete();
   });
 }
 
@@ -2761,7 +2776,10 @@ function init() {
   checkMonthlyAutoLoad();
 
   // Auto-load from cloud on startup — only applies if cloud data is newer (timestamp guard)
-  setTimeout(function() { loadFromCloud(false); }, 1500);
+  // syncReady stays false until loadFromCloud completes, preventing empty data from overwriting cloud
+  setTimeout(function() {
+    loadFromCloud(false, function() { syncReady = true; });
+  }, 1500);
 
   // Register service worker
   if ('serviceWorker' in navigator) {
