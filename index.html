@@ -2111,9 +2111,16 @@ function renderWeekly() {
   }
   el.innerHTML = items.map(function(i) {
     const val = getWeeklyVal(i.id);
-    const pct = Math.min(100, Math.round((val / i.target) * 100));
-    const done = val >= i.target;
-    const label = i.unit === 'times' ? (val + '/' + i.target) : (val + '/' + i.target + ' ' + i.unit);
+    var targetMins = i.unit === 'hrs' ? i.target * 60 : i.target;
+    const pct = Math.min(100, Math.round((val / targetMins) * 100));
+    const done = val >= targetMins;
+    var label;
+    if (i.unit === 'hrs') {
+      var h = Math.floor(val / 60), m = Math.round(val % 60);
+      label = (h ? h + 'h ' : '') + m + 'm / ' + i.target + 'h';
+    } else {
+      label = val + '/' + i.target;
+    }
     return '<div class="weekly-item' + (done ? ' w-done' : '') + '">' +
       '<div class="weekly-item-info" onclick="logWeeklyProgress(\'' + i.id + '\')">' +
         '<div class="weekly-item-top">' +
@@ -2133,14 +2140,15 @@ function logWeeklyProgress(itemId) {
   const wk = getWeekKey();
   if (!data.weekly.log[wk]) data.weekly.log[wk] = {};
 
-  if (item.unit === 'hrs' || item.unit === 'mins') {
+  if (item.unit === 'hrs') {
     const current = data.weekly.log[wk][itemId] || 0;
-    const unitLabel = item.unit === 'hrs' ? 'hours' : 'minutes';
-    const input = prompt('Log ' + unitLabel + ' for ' + item.text + ' (current: ' + current + '/' + item.target + ')', item.unit === 'mins' ? '30' : '1');
+    var ch = Math.floor(current / 60), cm = Math.round(current % 60);
+    var currentLabel = (ch ? ch + 'h ' : '') + cm + 'm';
+    const input = prompt('Log minutes for ' + item.text + ' (current: ' + currentLabel + ' / ' + item.target + 'h)', '30');
     if (input === null) return;
-    const val = parseFloat(input);
+    const val = parseInt(input);
     if (isNaN(val) || val <= 0) return;
-    data.weekly.log[wk][itemId] = Math.round((current + val) * 10) / 10;
+    data.weekly.log[wk][itemId] = current + val;
   } else {
     data.weekly.log[wk][itemId] = (data.weekly.log[wk][itemId] || 0) + 1;
   }
@@ -2150,8 +2158,9 @@ function logWeeklyProgress(itemId) {
   while (keys.length > 4) { delete data.weekly.log[keys.shift()]; }
   saveData();
   renderWeekly();
+  const targetMins = item.unit === 'hrs' ? item.target * 60 : item.target;
   const newVal = data.weekly.log[wk][itemId];
-  if (newVal >= item.target) toast(item.text + ' goal met!');
+  if (newVal >= targetMins) toast(item.text + ' goal met!');
 }
 
 function addWeeklyItem() {
@@ -2180,9 +2189,7 @@ function deleteWeeklyItem(itemId) {
 
 function toggleWeeklyUnit() {
   const btn = document.getElementById('weeklyUnitBtn');
-  const order = ['times', 'hrs', 'mins'];
-  const idx = order.indexOf(btn.textContent);
-  btn.textContent = order[(idx + 1) % order.length];
+  btn.textContent = btn.textContent === 'times' ? 'hrs' : 'times';
 }
 
 function toggleWeeklyOpen() {
