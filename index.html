@@ -2456,20 +2456,14 @@ function _doSync(showFeedback) {
   const ep = getSyncUrl();
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
   let payload = JSON.stringify(data);
-  if (payload.length > 6000) {
-    const lite = Object.assign({}, data, {history: data.history.slice(-100)});
-    payload = JSON.stringify(lite);
-  }
-  var url = ep + '?action=save&data=' + encodeURIComponent(payload);
   if (showFeedback) toast('Pushing ' + data.tasks.length + ' tasks...');
-  fetch(url).then(function(resp) {
-    return resp.json();
-  }).then(function(resp) {
-    if (resp && resp.ok) {
-      if (showFeedback) toast('Saved ' + data.tasks.length + ' tasks to cloud');
-    } else {
-      if (showFeedback) toast('Cloud save error: ' + ((resp && resp.error) || 'unknown'));
-    }
+  fetch(ep, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {'Content-Type': 'text/plain'},
+    body: payload
+  }).then(function() {
+    if (showFeedback) toast('Saved ' + data.tasks.length + ' tasks to cloud');
   }).catch(function(e) {
     if (showFeedback) toast('Cloud save failed: ' + e.message);
   });

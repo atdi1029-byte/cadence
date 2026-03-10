@@ -2,7 +2,7 @@
 // Cadence — Cloud Sync Google Apps Script
 // Stores/retrieves task data in a Google Sheet cell.
 // Deploy as Web App: Execute as "Me", Access "Anyone"
-// Supports JSONP (callback param) for cross-origin loads
+// Save uses POST (handles large payloads), Load uses GET
 // ============================================================
 
 var SHEET_NAME = 'CadenceData';
@@ -11,33 +11,36 @@ var TIMESTAMP_CELL = 'B1';   // last sync timestamp
 
 function doGet(e) {
   var action = (e.parameter.action || '').toLowerCase();
-  var callback = e.parameter.callback || '';
 
-  if (action === 'save') {
-    return handleSave(e, callback);
-  }
   if (action === 'load') {
-    return handleLoad(e, callback);
+    return handleLoad();
+  }
+  if (action === 'save') {
+    return handleSave(e.parameter.data || '');
   }
 
-  return wrapResponse({ok: false, error: 'Unknown action'}, callback);
+  return ContentService.createTextOutput(
+    JSON.stringify({ok: false, error: 'Unknown action'})
+  ).setMimeType(ContentService.MimeType.JSON);
 }
 
-function wrapResponse(obj, callback) {
-  var json = JSON.stringify(obj);
-  if (callback) {
-    return ContentService.createTextOutput(callback + '(' + json + ')')
-      .setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }
-  return ContentService.createTextOutput(json)
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function handleSave(e, callback) {
+function doPost(e) {
   try {
-    var dataStr = e.parameter.data || '';
+    var dataStr = e.postData ? e.postData.contents : '';
+    return handleSave(dataStr);
+  } catch (err) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ok: false, error: err.message})
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function handleSave(dataStr) {
+  try {
     if (!dataStr) {
-      return wrapResponse({ok: false, error: 'No data'}, callback);
+      return ContentService.createTextOutput(
+        JSON.stringify({ok: false, error: 'No data'})
+      ).setMimeType(ContentService.MimeType.JSON);
     }
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -49,25 +52,35 @@ function handleSave(e, callback) {
     sheet.getRange(DATA_CELL).setValue(dataStr);
     sheet.getRange(TIMESTAMP_CELL).setValue(new Date().toISOString());
 
-    return wrapResponse({ok: true, saved: true, ts: new Date().toISOString()}, callback);
+    return ContentService.createTextOutput(
+      JSON.stringify({ok: true, saved: true, ts: new Date().toISOString()})
+    ).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return wrapResponse({ok: false, error: err.message}, callback);
+    return ContentService.createTextOutput(
+      JSON.stringify({ok: false, error: err.message})
+    ).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-function handleLoad(e, callback) {
+function handleLoad() {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet) {
-      return wrapResponse({ok: true, data: null, ts: null}, callback);
+      return ContentService.createTextOutput(
+        JSON.stringify({ok: true, data: null, ts: null})
+      ).setMimeType(ContentService.MimeType.JSON);
     }
 
     var dataStr = sheet.getRange(DATA_CELL).getValue();
     var ts = sheet.getRange(TIMESTAMP_CELL).getValue();
 
-    return wrapResponse({ok: true, data: dataStr || null, ts: ts || null}, callback);
+    return ContentService.createTextOutput(
+      JSON.stringify({ok: true, data: dataStr || null, ts: ts || null})
+    ).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return wrapResponse({ok: false, error: err.message}, callback);
+    return ContentService.createTextOutput(
+      JSON.stringify({ok: false, error: err.message})
+    ).setMimeType(ContentService.MimeType.JSON);
   }
 }
