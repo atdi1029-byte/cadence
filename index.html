@@ -974,6 +974,7 @@ function selectCategory(cat) {
   selectedCategory = cat;
   document.getElementById('catBtn').textContent = CATEGORIES[cat].label.toLowerCase();
   document.getElementById('catPicker').classList.remove('open');
+  renderSuggestions();
 }
 
 // Close pickers on outside click
@@ -1724,8 +1725,12 @@ function computeSuggestions() {
     }
   }
 
-  results.sort((a, b) => b.score - a.score);
-  return results.slice(0, 8);
+  // Show selected category's suggestions first, then fill with others
+  const catResults = results.filter(r => r.category === selectedCategory);
+  const otherResults = results.filter(r => r.category !== selectedCategory);
+  catResults.sort((a, b) => b.score - a.score);
+  otherResults.sort((a, b) => b.score - a.score);
+  return catResults.concat(otherResults).slice(0, 8);
 }
 
 function renderSuggestions() {
