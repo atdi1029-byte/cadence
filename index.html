@@ -2539,9 +2539,8 @@ function init() {
   renderTemplateSuggestions();
   checkMonthlyAutoLoad();
 
-  // Cloud auto-load disabled — was overwriting local changes with stale cloud data.
-  // Cloud save still happens on every local save (syncToCloud).
-  // Use the manual "Restore" button in Settings to pull from cloud when needed.
+  // Auto-load from cloud on startup — only applies if cloud data is newer (timestamp guard)
+  setTimeout(function() { loadFromCloud(false); }, 1500);
 
   // Register service worker
   if ('serviceWorker' in navigator) {
