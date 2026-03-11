@@ -2724,8 +2724,8 @@ function loadFromCloud(showToast, onComplete) {
     if (onComplete) onComplete();
     return;
   }
-  // Don't pull from cloud if there's a pending sync or within 15s of a local save
-  if (!showToast && (_syncTimer || Date.now() - _lastLocalSave < 15000)) {
+  // Don't pull from cloud if there's a pending sync about to push
+  if (!showToast && _syncTimer) {
     if (onComplete) onComplete();
     return;
   }
@@ -2807,6 +2807,13 @@ function init() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js');
   }
+
+  // Auto-pull from cloud when app resumes (tab/app switch)
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && syncReady) {
+      loadFromCloud(false);
+    }
+  });
 
   // Auto-refresh theme every minute
   setInterval(function() {
