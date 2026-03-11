@@ -2037,13 +2037,30 @@ function deleteTemplate(id) {
   toast('Routine deleted');
 }
 
+function reorderRoutineItem(id, idx, dir) {
+  const tmpl = data.templates.find(t => t.id === id);
+  if (!tmpl) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= tmpl.items.length) return;
+  [tmpl.items[idx], tmpl.items[newIdx]] = [tmpl.items[newIdx], tmpl.items[idx]];
+  saveData();
+  openTemplateDetail(id);
+}
+
 function openTemplateDetail(id) {
   const tmpl = data.templates.find(t => t.id === id);
   if (!tmpl) return;
+  const arrowBtn = (idx, dir, symbol) => {
+    const disabled = (dir === -1 && idx === 0) || (dir === 1 && idx === tmpl.items.length - 1);
+    return `<button onclick="reorderRoutineItem('${id}',${idx},${dir})" style="background:none;border:none;color:${disabled ? 'var(--text-dim)' : 'var(--accent)'};font-size:1.1rem;padding:4px 8px;cursor:${disabled ? 'default' : 'pointer'};opacity:${disabled ? '0.3' : '1'}">${symbol}</button>`;
+  };
   openModal(`
     <div class="modal-title">${esc(tmpl.name)}</div>
     <div style="margin-bottom:16px">
-      ${tmpl.items.map(item => `<div style="padding:8px 0;border-bottom:1px solid var(--card-border);color:var(--text-bright);font-size:.9rem">${esc(item)}</div>`).join('')}
+      ${tmpl.items.map((item, i) => `<div style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid var(--card-border)">
+        <span style="flex:1;color:var(--text-bright);font-size:.9rem">${esc(item)}</span>
+        <span style="white-space:nowrap">${arrowBtn(i, -1, '&#9650;')}${arrowBtn(i, 1, '&#9660;')}</span>
+      </div>`).join('')}
     </div>
     <button class="form-btn" onclick="loadTemplate('${id}')" style="margin-bottom:10px">Load All Tasks</button>
     <button class="form-btn form-btn-outline" onclick="openTemplateModal('${id}')" style="margin-bottom:10px">Edit</button>
