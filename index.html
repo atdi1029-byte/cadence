@@ -1855,7 +1855,8 @@ function renderTemplateSuggestions() {
   }
   const dow = new Date().getDay();
   const today = dateStr(new Date());
-  const dismissed = JSON.parse(sessionStorage.getItem('cadence_tmpl_dismissed') || '[]');
+  const dismissKey = 'cadence_tmpl_dismissed_' + today;
+  const dismissed = JSON.parse(localStorage.getItem(dismissKey) || '[]');
 
   const matching = data.templates.filter(t => {
     if (dismissed.includes(t.id)) return false;
@@ -1881,9 +1882,11 @@ function renderTemplateSuggestions() {
 }
 
 function dismissTmplBanner(id) {
-  const dismissed = JSON.parse(sessionStorage.getItem('cadence_tmpl_dismissed') || '[]');
+  const today = dateStr(new Date());
+  const dismissKey = 'cadence_tmpl_dismissed_' + today;
+  const dismissed = JSON.parse(localStorage.getItem(dismissKey) || '[]');
   dismissed.push(id);
-  sessionStorage.setItem('cadence_tmpl_dismissed', JSON.stringify(dismissed));
+  localStorage.setItem(dismissKey, JSON.stringify(dismissed));
   renderTemplateSuggestions();
 }
 
@@ -2062,6 +2065,8 @@ function loadTemplate(id) {
   tmpl.useCount = (tmpl.useCount || 0) + 1;
   tmpl.lastUsed = new Date().toISOString();
   tmpl.lastUsedDate = dateStr(new Date());
+  // Also persist dismiss so cloud sync can't resurface the banner
+  dismissTmplBanner(id);
   saveData();
   closeModal();
   renderTasks();
