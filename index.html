@@ -2703,18 +2703,11 @@ function _doSync(showFeedback) {
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
   // Safety: never push empty tasks to cloud (prevents accidental data wipe)
   if (!showFeedback && (!data.tasks || data.tasks.length === 0)) return;
-  let payload = JSON.stringify(data);
+  const encoded = encodeURIComponent(JSON.stringify(data));
   if (showFeedback) toast('Pushing ' + data.tasks.length + ' tasks...');
-  fetch(ep, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {'Content-Type': 'text/plain'},
-    body: payload
-  }).then(function() {
-    if (showFeedback) toast('Saved ' + data.tasks.length + ' tasks to cloud');
-  }).catch(function(e) {
-    if (showFeedback) toast('Cloud save failed: ' + e.message);
-  });
+  // Use fireGet (img-based GET) to bypass mobile CORS redirect issues with Apps Script POST
+  fireGet(ep + '?action=save&data=' + encoded);
+  if (showFeedback) setTimeout(function() { toast('Saved ' + data.tasks.length + ' tasks to cloud'); }, 500);
 }
 
 function loadFromCloud(showToast, onComplete) {
