@@ -2703,10 +2703,17 @@ function _doSync(showFeedback) {
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
   // Safety: never push empty tasks to cloud (prevents accidental data wipe)
   if (!showFeedback && (!data.tasks || data.tasks.length === 0)) return;
-  const encoded = encodeURIComponent(JSON.stringify(data));
+  const payload = JSON.stringify(data);
   if (showFeedback) toast('Pushing ' + data.tasks.length + ' tasks...');
-  // Use fireGet (img-based GET) to bypass mobile CORS redirect issues with Apps Script POST
-  fireGet(ep + '?action=save&data=' + encoded);
+  // Try both methods: POST works on desktop, fireGet works on mobile
+  // Save is idempotent (overwrites sheet cell) so both arriving is safe
+  fetch(ep, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {'Content-Type': 'text/plain'},
+    body: payload
+  }).catch(function() {});
+  fireGet(ep + '?action=save&data=' + encodeURIComponent(payload));
   if (showFeedback) setTimeout(function() { toast('Saved ' + data.tasks.length + ' tasks to cloud'); }, 500);
 }
 
@@ -2782,6 +2789,11 @@ saveData = function() {
 // ===== INITIALIZATION =====
 function init() {
   loadData();
+  // Stamp legacy data with lastModified so cloud sync comparison works
+  if (!data.lastModified) {
+    data.lastModified = Date.now();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
   pruneHistory();
   initTheme();
   updateGreeting();
