@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cadence-v115';
+const CACHE_NAME = 'cadence-v116';
 const ASSETS = [
   './',
   './index.html',

@@ -35,7 +35,8 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    var dataStr = e.postData ? e.postData.contents : '';
+    // Form POST puts value in e.parameter.data; raw POST puts it in e.postData.contents
+    var dataStr = e.parameter.data || (e.postData ? e.postData.contents : '');
     return handleSave(dataStr);
   } catch (err) {
     return ContentService.createTextOutput(
