@@ -2697,13 +2697,9 @@ function syncToCloud() {
   _syncTimer = setTimeout(_doSync, 2000);
 }
 
-// Chunked save via fetch GET — uses small chunks to stay under URL length limits
-// fetch gives us real error messages unlike JSONP script tags
+// Chunked save via JSONP GET — small chunks to stay under URL length limits
+// JSONP bypasses CORS (fetch fails with "Failed to fetch" on GAS redirect)
 var CHUNK_SIZE = 600; // raw chars per chunk — stays under ~2KB URL after encoding
-
-function fetchJson(url) {
-  return fetch(url, {redirect:'follow'}).then(function(r) { return r.json(); });
-}
 
 function _doSync(showFeedback) {
   _syncTimer = null;
@@ -2729,17 +2725,14 @@ function _doSync(showFeedback) {
   // Small payloads: single GET save
   var encoded = encodeURIComponent(payload);
   if (encoded.length < 1500) {
-    fetchJson(ep + '?action=save&data=' + encoded).then(function(resp) {
-      if (showFeedback) toast(resp && resp.ok ? 'Pushed ' + data.tasks.length + ' tasks' : 'Push error');
-      else syncDone(resp && resp.ok, resp && resp.error);
-    }).catch(function(err) {
-      if (showFeedback) toast('Push failed: ' + err.message);
-      else syncDone(false, err.message);
+    jsonpFetch(ep + '?action=save&data=' + encoded, function(err, resp) {
+      if (showFeedback) toast(err ? 'Push failed: ' + err : (resp && resp.ok ? 'Pushed ' + data.tasks.length + ' tasks' : 'Push error'));
+      else syncDone(!err && resp && resp.ok, err);
     });
     return;
   }
 
-  // Large payloads: chunked save — send chunks in parallel batches of 5
+  // Large payloads: chunked save via JSONP, sequential
   var chunks = [];
   for (var i = 0; i < payload.length; i += CHUNK_SIZE) {
     chunks.push(payload.substring(i, i + CHUNK_SIZE));
@@ -2748,38 +2741,25 @@ function _doSync(showFeedback) {
   _syncing = true;
   if (showFeedback) toast('Pushing ' + total + ' parts...');
 
-  function sendBatch(startIdx) {
-    var batchEnd = Math.min(startIdx + 5, total);
-    if (startIdx >= total) {
+  function sendChunk(idx) {
+    if (idx >= total) {
       // All chunks sent — assemble
-      fetchJson(ep + '?action=save_done&n=' + total).then(function(resp) {
-        if (showFeedback) toast(resp && resp.ok ? 'Pushed ' + data.tasks.length + ' tasks' : 'Assemble error');
-        syncDone(resp && resp.ok, resp && resp.error);
-      }).catch(function(err) {
-        if (showFeedback) toast('Assemble failed: ' + err.message);
-        syncDone(false, err.message);
+      jsonpFetch(ep + '?action=save_done&n=' + total, function(err, resp) {
+        if (showFeedback) toast(err ? 'Assemble failed: ' + err : (resp && resp.ok ? 'Pushed ' + data.tasks.length + ' tasks' : 'Assemble error'));
+        syncDone(!err && resp && resp.ok, err || (resp && resp.error));
       });
       return;
     }
-    var promises = [];
-    for (var idx = startIdx; idx < batchEnd; idx++) {
-      (function(i) {
-        promises.push(
-          fetchJson(ep + '?action=save_chunk&i=' + i + '&n=' + total + '&c=' + encodeURIComponent(chunks[i]))
-            .then(function(resp) {
-              if (!resp || !resp.ok) throw new Error('chunk ' + i + ': ' + (resp && resp.error || 'failed'));
-            })
-        );
-      })(idx);
-    }
-    Promise.all(promises).then(function() {
-      sendBatch(batchEnd);
-    }).catch(function(err) {
-      if (showFeedback) toast('Push failed: ' + err.message);
-      syncDone(false, err.message);
+    jsonpFetch(ep + '?action=save_chunk&i=' + idx + '&n=' + total + '&c=' + encodeURIComponent(chunks[idx]), function(err, resp) {
+      if (err || !resp || !resp.ok) {
+        if (showFeedback) toast('Part ' + (idx+1) + '/' + total + ' failed: ' + (err || (resp && resp.error) || 'error'));
+        syncDone(false, 'part ' + (idx+1) + ': ' + (err || 'failed'));
+        return;
+      }
+      sendChunk(idx + 1);
     });
   }
-  sendBatch(0);
+  sendChunk(0);
 }
 
 function loadFromCloud(showToast, onComplete) {
