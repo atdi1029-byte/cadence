@@ -2697,69 +2697,77 @@ function syncToCloud() {
   _syncTimer = setTimeout(_doSync, 2000);
 }
 
-// Chunked save via JSONP GET — small chunks to stay under URL length limits
-// JSONP bypasses CORS (fetch fails with "Failed to fetch" on GAS redirect)
-var CHUNK_SIZE = 600; // raw chars per chunk — stays under ~2KB URL after encoding
+// Fire-and-forget GET (for saves — server processes request, response not needed)
+// fetch(no-cors) bypasses CORS entirely; Image ping as fallback
+function fireGet(url) {
+  return new Promise(function(resolve) {
+    fetch(url, {mode: 'no-cors', redirect: 'follow'}).then(function() {
+      resolve(true);
+    }).catch(function() {
+      var img = new Image();
+      img.onload = img.onerror = function() { resolve(true); };
+      img.src = url;
+    });
+  });
+}
+
+var CHUNK_SIZE = 300;
 
 function _doSync(showFeedback) {
   _syncTimer = null;
-  if (_syncing) {
-    _pendingResync = true;
-    return;
-  }
+  if (_syncing) { _pendingResync = true; return; }
   var ep = getSyncUrl();
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
   if (!showFeedback && (!data.tasks || data.tasks.length === 0)) return;
   var payload = JSON.stringify(data);
+  _syncing = true;
 
   function syncDone(ok, msg) {
     _syncing = false;
-    if (ok) { toast('Synced', null, 1500); }
-    else if (msg) { toast('Sync: ' + msg, null, 3000); }
+    if (ok) toast('Synced v124', null, 1500);
+    else if (msg) toast('Sync: ' + msg, null, 3000);
     if (_pendingResync) {
       _pendingResync = false;
       setTimeout(function() { _doSync(false); }, 1000);
     }
   }
 
-  // Small payloads: single GET save
-  var encoded = encodeURIComponent(payload);
-  if (encoded.length < 1500) {
-    jsonpFetch(ep + '?action=save&data=' + encoded, function(err, resp) {
-      if (showFeedback) toast(err ? 'Push failed: ' + err : (resp && resp.ok ? 'Pushed ' + data.tasks.length + ' tasks' : 'Push error'));
-      else syncDone(!err && resp && resp.ok, err);
-    });
-    return;
-  }
-
-  // Large payloads: chunked save via JSONP, sequential
-  var chunks = [];
-  for (var i = 0; i < payload.length; i += CHUNK_SIZE) {
-    chunks.push(payload.substring(i, i + CHUNK_SIZE));
-  }
-  var total = chunks.length;
-  _syncing = true;
-  if (showFeedback) toast('Pushing ' + total + ' parts...');
-
-  function sendChunk(idx) {
-    if (idx >= total) {
-      // All chunks sent — assemble
-      jsonpFetch(ep + '?action=save_done&n=' + total, function(err, resp) {
-        if (showFeedback) toast(err ? 'Assemble failed: ' + err : (resp && resp.ok ? 'Pushed ' + data.tasks.length + ' tasks' : 'Assemble error'));
-        syncDone(!err && resp && resp.ok, err || (resp && resp.error));
-      });
-      return;
+  function doSave() {
+    var encoded = encodeURIComponent(payload);
+    if (encoded.length < 1500) {
+      return fireGet(ep + '?action=save&data=' + encoded);
     }
-    jsonpFetch(ep + '?action=save_chunk&i=' + idx + '&n=' + total + '&c=' + encodeURIComponent(chunks[idx]), function(err, resp) {
-      if (err || !resp || !resp.ok) {
-        if (showFeedback) toast('Part ' + (idx+1) + '/' + total + ' failed: ' + (err || (resp && resp.error) || 'error'));
-        syncDone(false, 'part ' + (idx+1) + ': ' + (err || 'failed'));
-        return;
-      }
-      sendChunk(idx + 1);
+    var chunks = [];
+    for (var i = 0; i < payload.length; i += CHUNK_SIZE) {
+      chunks.push(payload.substring(i, i + CHUNK_SIZE));
+    }
+    var total = chunks.length;
+    if (showFeedback) toast('Pushing ' + total + ' parts...');
+    // Send all chunks in parallel (each writes to separate cell)
+    return Promise.all(chunks.map(function(chunk, idx) {
+      return fireGet(ep + '?action=save_chunk&i=' + idx + '&n=' + total + '&c=' + encodeURIComponent(chunk));
+    })).then(function() {
+      return fireGet(ep + '?action=save_done&n=' + total);
     });
   }
-  sendChunk(0);
+
+  doSave().then(function() {
+    if (!showFeedback) { syncDone(true); return; }
+    // Manual push: verify with JSONP load
+    jsonpFetch(ep + '?action=load', function(err, resp) {
+      var ok = false;
+      if (!err && resp && resp.ok && resp.data) {
+        var cloud;
+        try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
+        ok = cloud && cloud.tasks && cloud.tasks.length === data.tasks.length;
+      }
+      _syncing = false;
+      toast(ok ? 'Pushed ' + data.tasks.length + ' tasks' : 'Push may have failed — try again');
+      if (_pendingResync) { _pendingResync = false; setTimeout(function() { _doSync(false); }, 1000); }
+    });
+  }).catch(function() {
+    syncDone(false, 'save error');
+  });
 }
 
 function loadFromCloud(showToast, onComplete) {
@@ -2857,7 +2865,7 @@ function init() {
 
   // Register service worker
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js');
+    navigator.serviceWorker.register('./service-worker.js', {updateViaCache: 'none'});
   }
 
   // Auto-pull from cloud when app resumes (tab/app switch)
