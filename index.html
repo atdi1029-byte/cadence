@@ -1670,59 +1670,62 @@ function computeSuggestions() {
     if (activeTasks.has(key)) continue;
     // Skip if already suggested today and dismissed
     if (entry.lastSuggestedDate === today) continue;
-    if (entry.count < 2) continue; // need at least 2 completions
+    if (entry.count < 3) continue; // need at least 3 completions to suggest
 
     let score = 0;
     let reasons = [];
 
-    // Frequency score (0-40)
+    // Count score (0-35) — most commonly done tasks always float to top
+    if (entry.count >= 3) score += 5;
+    if (entry.count >= 7) score += 10;
+    if (entry.count >= 15) score += 10;
+    if (entry.count >= 30) score += 10;
+    reasons.push(entry.count + 'x done');
+
+    // Overdue/due score (0-30) — is this task due based on its pattern?
     if (entry.avgGapDays > 0 && entry.lastDone) {
       const daysSince = daysBetween(new Date(entry.lastDone), now);
       if (daysSince >= entry.avgGapDays * 0.8) {
         score += Math.min(30, 30 * daysSince / entry.avgGapDays);
         const gap = Math.round(entry.avgGapDays);
-        if (gap === 1) reasons.push('Daily');
-        else if (gap <= 7) reasons.push('Every ' + gap + ' days');
-        else reasons.push('Every ' + Math.round(gap/7) + ' weeks');
+        if (gap === 1) reasons[0] = 'Daily \u00B7 ' + entry.count + 'x';
+        else if (gap <= 7) reasons[0] = 'Every ' + gap + 'd \u00B7 ' + entry.count + 'x';
+        else reasons[0] = 'Every ' + Math.round(gap/7) + 'w \u00B7 ' + entry.count + 'x';
       }
     }
-    if (entry.count >= 10) score += 5;
-    if (entry.count >= 25) score += 5;
 
-    // Day-of-week score (0-25)
+    // Day-of-week score (0-20)
     const daySum = entry.dayDistribution.reduce((a,b) => a + b, 0);
     if (daySum > 0) {
       const dayPct = entry.dayDistribution[todayDOW] / daySum;
       if (dayPct > 0.2) {
-        score += 25 * dayPct;
-        reasons.push('Usually ' + DAY_NAMES[todayDOW] + 's');
+        score += 20 * dayPct;
       }
     }
 
-    // Time-of-day score (0-20)
+    // Time-of-day score (0-15)
     const slotSum = Object.values(entry.timeSlots).reduce((a,b) => a + b, 0);
     if (slotSum > 0) {
       const slotPct = (entry.timeSlots[currentSlot] || 0) / slotSum;
       if (slotPct > 0.25) {
-        score += 20 * slotPct;
-        reasons.push(TIME_SLOTS[currentSlot]);
+        score += 15 * slotPct;
       }
     }
 
-    // Recency score (0-15)
+    // Staleness penalty — don't suggest stuff not done in a long time
     if (entry.lastDone) {
       const daysSince = daysBetween(new Date(entry.lastDone), now);
-      if (daysSince <= 7) score += 15 * (1 - daysSince / 7);
-      else if (daysSince > 30) score -= 10;
+      if (daysSince > 30) score -= 15;
+      if (daysSince > 60) score -= 15;
     }
 
     // Streak bonus (0-10)
     if (entry.streakWeeks >= 4) {
       score += Math.min(10, entry.streakWeeks);
-      reasons.push(entry.streakWeeks + '-week streak');
+      reasons[0] = entry.streakWeeks + '-week streak \u00B7 ' + entry.count + 'x';
     }
 
-    if (score >= 12) {
+    if (score >= 10) {
       results.push({
         text: entry.textOriginal || key,
         key: key,
@@ -2710,7 +2713,7 @@ function _doSync(showFeedback) {
 
   function syncDone(ok, msg) {
     _syncing = false;
-    if (ok) toast('Synced v125', null, 1500);
+    if (ok) toast('Synced v126', null, 1500);
     else if (msg) toast('Sync: ' + msg, null, 3000);
     if (_pendingResync) {
       _pendingResync = false;
