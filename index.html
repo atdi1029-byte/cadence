@@ -2648,19 +2648,8 @@ function clearHistory() {
 }
 
 // ===== CLOUD SYNC =====
-// Set this to your deployed Apps Script URL after deploying apps_script.gs
 function getSyncUrl() {
   return localStorage.getItem('cadence_sync_url') || '';
-}
-
-function fireGet(url) {
-  return new Promise(function(resolve) {
-    const img = new Image();
-    img.onload = resolve;
-    img.onerror = resolve; // Apps Script returns JSON not an image, so onerror = success
-    setTimeout(resolve, 5000);
-    img.src = url;
-  });
 }
 
 // JSONP helper — bypasses CORS by loading script tag
@@ -2697,44 +2686,35 @@ function syncToCloud() {
   _syncTimer = setTimeout(_doSync, 2000);
 }
 
-function saveViaForm(url, payload) {
-  // Hidden iframe + form POST — follows redirects, handles large payloads, works cross-origin
-  var iframe = document.getElementById('_syncFrame');
-  if (!iframe) {
-    iframe = document.createElement('iframe');
-    iframe.id = '_syncFrame';
-    iframe.name = '_syncFrame';
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-  }
-  var form = document.createElement('form');
-  form.method = 'POST';
-  form.action = url;
-  form.target = '_syncFrame';
-  var input = document.createElement('input');
-  input.type = 'hidden';
-  input.name = 'data';
-  input.value = payload;
-  form.appendChild(input);
-  document.body.appendChild(form);
-  form.submit();
-  form.remove();
-}
-
 function _doSync(showFeedback) {
   _syncTimer = null;
   const ep = getSyncUrl();
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
-  // Safety: never push empty tasks to cloud (prevents accidental data wipe)
+  // Safety: never push empty tasks to cloud
   if (!showFeedback && (!data.tasks || data.tasks.length === 0)) return;
   const payload = JSON.stringify(data);
   if (showFeedback) toast('Pushing ' + data.tasks.length + ' tasks...');
-  // Form POST via hidden iframe — reliable across desktop & mobile
-  try { saveViaForm(ep, payload); } catch(e) {}
-  // fireGet fallback for tiny payloads (< 1500 chars encoded)
-  var encoded = encodeURIComponent(payload);
-  if (encoded.length < 1500) fireGet(ep + '?action=save&data=' + encoded);
-  if (showFeedback) setTimeout(function() { toast('Saved ' + data.tasks.length + ' tasks to cloud'); }, 500);
+
+  // Primary: fetch POST with no-cors (reliable, works on mobile)
+  // Google Apps Script runs doPost() before redirecting, so data is saved
+  // even though we can't read the response (opaque)
+  fetch(ep, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'data=' + encodeURIComponent(payload)
+  }).then(function() {
+    if (showFeedback) toast('Pushed ' + data.tasks.length + ' tasks to cloud');
+  }).catch(function(err) {
+    // Fallback: sendBeacon (survives page close, always works)
+    var sent = false;
+    if (navigator.sendBeacon) {
+      try {
+        sent = navigator.sendBeacon(ep, new URLSearchParams({data: payload}));
+      } catch(e) {}
+    }
+    if (showFeedback) toast(sent ? 'Pushed (beacon)' : 'Push failed: ' + err);
+  });
 }
 
 function loadFromCloud(showToast, onComplete) {
@@ -2780,12 +2760,12 @@ function loadFromCloud(showToast, onComplete) {
       if (onComplete) onComplete();
       return;
     }
-    if (JSON.stringify(data.tasks) === JSON.stringify(cloud.tasks)) {
-      if (showToast) toast('Already up to date');
-      if (onComplete) onComplete();
-      return;
+    // Manual restore: always apply cloud data (skip "already up to date" check)
+    // Auto-sync: skip if tasks match or local is newer
+    if (!showToast) {
+      if (JSON.stringify(data.tasks) === JSON.stringify(cloud.tasks)) { if (onComplete) onComplete(); return; }
+      if (data.lastModified && (!cloud.lastModified || data.lastModified >= cloud.lastModified)) { if (onComplete) onComplete(); return; }
     }
-    if (!showToast && data.lastModified && (!cloud.lastModified || data.lastModified >= cloud.lastModified)) { if (onComplete) onComplete(); return; }
 
     data = cloud;
     _origSaveData();
@@ -2794,7 +2774,7 @@ function loadFromCloud(showToast, onComplete) {
     renderTemplateSuggestions();
     if (currentView === 'insights') renderInsights();
     if (currentView === 'settings') renderSettings();
-    if (showToast) toast('Synced ' + cloud.tasks.length + ' tasks from cloud');
+    if (showToast) toast('Restored ' + cloud.tasks.length + ' tasks from cloud');
     if (onComplete) onComplete();
   });
 }
