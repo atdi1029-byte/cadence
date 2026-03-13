@@ -2,7 +2,7 @@
 // Cadence — Cloud Sync Google Apps Script
 // Stores/retrieves task data in a Google Sheet cell.
 // Deploy as Web App: Execute as "Me", Access "Anyone"
-// Save uses POST (handles large payloads), Load uses GET
+// Saves use chunked GET (POST is broken due to GAS redirect)
 // ============================================================
 
 var SHEET_NAME = 'CadenceData';
@@ -18,10 +18,12 @@ function doGet(e) {
     result = handleLoad();
   } else if (action === 'save') {
     result = handleSave(e.parameter.data || '');
+  } else if (action === 'save_chunk') {
+    result = handleSaveChunk(e);
+  } else if (action === 'save_done') {
+    result = handleSaveDone(e);
   } else {
-    result = ContentService.createTextOutput(
-      JSON.stringify({ok: false, error: 'Unknown action'})
-    ).setMimeType(ContentService.MimeType.JSON);
+    result = jsonOut({ok: false, error: 'Unknown action'});
   }
 
   // JSONP support — wrap in callback for CORS-free loading
@@ -35,40 +37,73 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    // Form POST puts value in e.parameter.data; raw POST puts it in e.postData.contents
     var dataStr = e.parameter.data || (e.postData ? e.postData.contents : '');
     return handleSave(dataStr);
   } catch (err) {
-    return ContentService.createTextOutput(
-      JSON.stringify({ok: false, error: err.message})
-    ).setMimeType(ContentService.MimeType.JSON);
+    return jsonOut({ok: false, error: err.message});
   }
+}
+
+function jsonOut(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function handleSave(dataStr) {
   try {
-    if (!dataStr) {
-      return ContentService.createTextOutput(
-        JSON.stringify({ok: false, error: 'No data'})
-      ).setMimeType(ContentService.MimeType.JSON);
-    }
-
+    if (!dataStr) return jsonOut({ok: false, error: 'No data'});
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName(SHEET_NAME);
-    if (!sheet) {
-      sheet = ss.insertSheet(SHEET_NAME);
-    }
-
+    var sheet = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
     sheet.getRange(DATA_CELL).setValue(dataStr);
     sheet.getRange(TIMESTAMP_CELL).setValue(new Date().toISOString());
-
-    return ContentService.createTextOutput(
-      JSON.stringify({ok: true, saved: true, ts: new Date().toISOString()})
-    ).setMimeType(ContentService.MimeType.JSON);
+    return jsonOut({ok: true, saved: true, ts: new Date().toISOString()});
   } catch (err) {
-    return ContentService.createTextOutput(
-      JSON.stringify({ok: false, error: err.message})
-    ).setMimeType(ContentService.MimeType.JSON);
+    return jsonOut({ok: false, error: err.message});
+  }
+}
+
+// Store one chunk of data (used for large payloads that don't fit in a single GET URL)
+function handleSaveChunk(e) {
+  try {
+    var idx = parseInt(e.parameter.i || '0');
+    var chunk = e.parameter.c || '';
+    if (!chunk) return jsonOut({ok: false, error: 'No chunk data'});
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
+    // Store chunk in column C (C1=chunk0, C2=chunk1, etc.)
+    sheet.getRange('C' + (idx + 1)).setValue(chunk);
+    return jsonOut({ok: true, chunk: idx});
+  } catch (err) {
+    return jsonOut({ok: false, error: err.message});
+  }
+}
+
+// Assemble all chunks into the final data blob
+function handleSaveDone(e) {
+  try {
+    var total = parseInt(e.parameter.n || '1');
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
+
+    // Concatenate all chunks
+    var fullData = '';
+    for (var i = 0; i < total; i++) {
+      fullData += (sheet.getRange('C' + (i + 1)).getValue() || '');
+    }
+
+    // Save assembled data
+    sheet.getRange(DATA_CELL).setValue(fullData);
+    sheet.getRange(TIMESTAMP_CELL).setValue(new Date().toISOString());
+
+    // Clean up chunk cells
+    for (var i = 0; i < total; i++) {
+      sheet.getRange('C' + (i + 1)).clearContent();
+    }
+
+    return jsonOut({ok: true, saved: true, size: fullData.length, ts: new Date().toISOString()});
+  } catch (err) {
+    return jsonOut({ok: false, error: err.message});
   }
 }
 
@@ -76,21 +111,12 @@ function handleLoad() {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(SHEET_NAME);
-    if (!sheet) {
-      return ContentService.createTextOutput(
-        JSON.stringify({ok: true, data: null, ts: null})
-      ).setMimeType(ContentService.MimeType.JSON);
-    }
+    if (!sheet) return jsonOut({ok: true, data: null, ts: null});
 
     var dataStr = sheet.getRange(DATA_CELL).getValue();
     var ts = sheet.getRange(TIMESTAMP_CELL).getValue();
-
-    return ContentService.createTextOutput(
-      JSON.stringify({ok: true, data: dataStr || null, ts: ts || null})
-    ).setMimeType(ContentService.MimeType.JSON);
+    return jsonOut({ok: true, data: dataStr || null, ts: ts || null});
   } catch (err) {
-    return ContentService.createTextOutput(
-      JSON.stringify({ok: false, error: err.message})
-    ).setMimeType(ContentService.MimeType.JSON);
+    return jsonOut({ok: false, error: err.message});
   }
 }

@@ -2652,9 +2652,10 @@ function getSyncUrl() {
   return localStorage.getItem('cadence_sync_url') || '';
 }
 
-// JSONP helper — bypasses CORS by loading script tag
+// JSONP helper — bypasses CORS by loading script tag (same as proven load mechanism)
+let _jsonpCounter = 0;
 function jsonpFetch(url, callback) {
-  const cbName = '_cadenceCb_' + Date.now();
+  const cbName = '_cadenceCb_' + Date.now() + '_' + (++_jsonpCounter);
   const script = document.createElement('script');
   let done = false;
   window[cbName] = function(resp) {
@@ -2665,17 +2666,18 @@ function jsonpFetch(url, callback) {
   };
   script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName;
   script.onerror = function() {
-    if (!done) { delete window[cbName]; script.remove(); callback('Script load failed'); }
+    if (!done) { done = true; delete window[cbName]; script.remove(); callback('Script load failed'); }
   };
   setTimeout(function() {
-    if (!done) { delete window[cbName]; script.remove(); callback('Timeout'); }
-  }, 15000);
+    if (!done) { done = true; delete window[cbName]; script.remove(); callback('Timeout'); }
+  }, 20000);
   document.head.appendChild(script);
 }
 
 let _syncTimer = null;
 let _lastLocalSave = 0;
 let syncReady = false;
+let _syncing = false;
 
 function syncToCloud() {
   if (!syncReady) return;
@@ -2686,35 +2688,61 @@ function syncToCloud() {
   _syncTimer = setTimeout(_doSync, 2000);
 }
 
+// Split JSON into chunks and save via sequential JSONP GETs
+// This is the ONLY reliable way to write to Google Apps Script from a browser
+// (POST is broken due to GAS 302 redirect dropping the body)
+var CHUNK_SIZE = 2000; // chars of raw JSON per chunk — safe for URL length
+
 function _doSync(showFeedback) {
   _syncTimer = null;
-  const ep = getSyncUrl();
+  if (_syncing) return;
+  var ep = getSyncUrl();
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
-  // Safety: never push empty tasks to cloud
   if (!showFeedback && (!data.tasks || data.tasks.length === 0)) return;
-  const payload = JSON.stringify(data);
-  if (showFeedback) toast('Pushing ' + data.tasks.length + ' tasks...');
+  var payload = JSON.stringify(data);
 
-  // Primary: fetch POST with no-cors (reliable, works on mobile)
-  // Google Apps Script runs doPost() before redirecting, so data is saved
-  // even though we can't read the response (opaque)
-  fetch(ep, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-    body: 'data=' + encodeURIComponent(payload)
-  }).then(function() {
-    if (showFeedback) toast('Pushed ' + data.tasks.length + ' tasks to cloud');
-  }).catch(function(err) {
-    // Fallback: sendBeacon (survives page close, always works)
-    var sent = false;
-    if (navigator.sendBeacon) {
-      try {
-        sent = navigator.sendBeacon(ep, new URLSearchParams({data: payload}));
-      } catch(e) {}
+  // Small payloads: single GET save (< 1500 chars encoded)
+  var encoded = encodeURIComponent(payload);
+  if (encoded.length < 1500) {
+    jsonpFetch(ep + '?action=save&data=' + encoded, function(err, resp) {
+      if (showFeedback) toast(err ? 'Push failed: ' + err : (resp && resp.ok ? 'Pushed ' + data.tasks.length + ' tasks' : 'Push error'));
+    });
+    return;
+  }
+
+  // Large payloads: chunked save via JSONP
+  var chunks = [];
+  for (var i = 0; i < payload.length; i += CHUNK_SIZE) {
+    chunks.push(payload.substring(i, i + CHUNK_SIZE));
+  }
+  var total = chunks.length;
+  _syncing = true;
+  if (showFeedback) toast('Pushing ' + total + ' parts...');
+
+  function sendChunk(idx) {
+    if (idx >= total) {
+      // All chunks sent — tell server to assemble
+      jsonpFetch(ep + '?action=save_done&n=' + total, function(err, resp) {
+        _syncing = false;
+        if (err) { if (showFeedback) toast('Assemble failed: ' + err); return; }
+        if (resp && resp.ok) {
+          if (showFeedback) toast('Pushed ' + data.tasks.length + ' tasks (' + Math.round(payload.length/1024) + 'KB)');
+        } else {
+          if (showFeedback) toast('Assemble error: ' + (resp && resp.error || 'unknown'));
+        }
+      });
+      return;
     }
-    if (showFeedback) toast(sent ? 'Pushed (beacon)' : 'Push failed: ' + err);
-  });
+    jsonpFetch(ep + '?action=save_chunk&i=' + idx + '&n=' + total + '&c=' + encodeURIComponent(chunks[idx]), function(err, resp) {
+      if (err || !resp || !resp.ok) {
+        _syncing = false;
+        if (showFeedback) toast('Push failed at part ' + (idx+1) + '/' + total + ': ' + (err || (resp && resp.error) || 'error'));
+        return;
+      }
+      sendChunk(idx + 1);
+    });
+  }
+  sendChunk(0);
 }
 
 function loadFromCloud(showToast, onComplete) {
