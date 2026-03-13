@@ -921,13 +921,13 @@ function showView(viewId, btn) {
 }
 
 // ===== TOAST =====
-function toast(msg, undoFn) {
+function toast(msg, undoFn, duration) {
   const el = document.getElementById('toast');
   el.innerHTML = msg + (undoFn ? ' <span class="toast-undo" onclick="doUndo()">Undo</span>' : '');
   lastUndoAction = undoFn || null;
   el.classList.add('visible');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.classList.remove('visible'); lastUndoAction = null; }, 3500);
+  toastTimer = setTimeout(() => { el.classList.remove('visible'); lastUndoAction = null; }, duration || 3500);
 }
 
 function doUndo() {
@@ -2714,8 +2714,11 @@ function _doSync(showFeedback) {
   if (!showFeedback && (!data.tasks || data.tasks.length === 0)) return;
   var payload = JSON.stringify(data);
 
-  function syncDone() {
+  function syncDone(ok, msg) {
     _syncing = false;
+    // Always show brief sync status so user knows it's working
+    if (ok) { toast('Synced', null, 1500); }
+    else if (msg) { toast('Sync: ' + msg, null, 3000); }
     if (_pendingResync) {
       _pendingResync = false;
       setTimeout(function() { _doSync(false); }, 1000);
@@ -2727,7 +2730,7 @@ function _doSync(showFeedback) {
   if (encoded.length < 1500) {
     jsonpFetch(ep + '?action=save&data=' + encoded, function(err, resp) {
       if (showFeedback) toast(err ? 'Push failed: ' + err : (resp && resp.ok ? 'Pushed ' + data.tasks.length + ' tasks' : 'Push error'));
-      syncDone();
+      else syncDone(!err && resp && resp.ok, err);
     });
     return;
   }
@@ -2745,17 +2748,19 @@ function _doSync(showFeedback) {
     if (idx >= total) {
       // All chunks sent — tell server to assemble
       jsonpFetch(ep + '?action=save_done&n=' + total, function(err, resp) {
-        if (err) { if (showFeedback) toast('Assemble failed: ' + err); }
-        else if (resp && resp.ok) { if (showFeedback) toast('Pushed ' + data.tasks.length + ' tasks (' + Math.round(payload.length/1024) + 'KB)'); }
-        else { if (showFeedback) toast('Assemble error: ' + (resp && resp.error || 'unknown')); }
-        syncDone();
+        if (showFeedback) {
+          if (err) toast('Assemble failed: ' + err);
+          else if (resp && resp.ok) toast('Pushed ' + data.tasks.length + ' tasks (' + Math.round(payload.length/1024) + 'KB)');
+          else toast('Assemble error: ' + (resp && resp.error || 'unknown'));
+        }
+        syncDone(!err && resp && resp.ok, err || (resp && resp.error));
       });
       return;
     }
     jsonpFetch(ep + '?action=save_chunk&i=' + idx + '&n=' + total + '&c=' + encodeURIComponent(chunks[idx]), function(err, resp) {
       if (err || !resp || !resp.ok) {
         if (showFeedback) toast('Push failed at part ' + (idx+1) + '/' + total + ': ' + (err || (resp && resp.error) || 'error'));
-        syncDone();
+        syncDone(false, err || 'chunk ' + (idx+1) + ' failed');
         return;
       }
       sendChunk(idx + 1);
