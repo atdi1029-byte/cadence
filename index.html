@@ -2678,6 +2678,7 @@ let _syncTimer = null;
 let _lastLocalSave = 0;
 let syncReady = false;
 let _syncing = false;
+let _pendingResync = false;
 
 function syncToCloud() {
   if (!syncReady) return;
@@ -2695,17 +2696,30 @@ var CHUNK_SIZE = 2000; // chars of raw JSON per chunk — safe for URL length
 
 function _doSync(showFeedback) {
   _syncTimer = null;
-  if (_syncing) return;
+  if (_syncing) {
+    // Sync in progress — queue a re-sync so changes aren't lost
+    _pendingResync = true;
+    return;
+  }
   var ep = getSyncUrl();
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
   if (!showFeedback && (!data.tasks || data.tasks.length === 0)) return;
   var payload = JSON.stringify(data);
+
+  function syncDone() {
+    _syncing = false;
+    if (_pendingResync) {
+      _pendingResync = false;
+      setTimeout(function() { _doSync(false); }, 1000);
+    }
+  }
 
   // Small payloads: single GET save (< 1500 chars encoded)
   var encoded = encodeURIComponent(payload);
   if (encoded.length < 1500) {
     jsonpFetch(ep + '?action=save&data=' + encoded, function(err, resp) {
       if (showFeedback) toast(err ? 'Push failed: ' + err : (resp && resp.ok ? 'Pushed ' + data.tasks.length + ' tasks' : 'Push error'));
+      syncDone();
     });
     return;
   }
@@ -2723,20 +2737,17 @@ function _doSync(showFeedback) {
     if (idx >= total) {
       // All chunks sent — tell server to assemble
       jsonpFetch(ep + '?action=save_done&n=' + total, function(err, resp) {
-        _syncing = false;
-        if (err) { if (showFeedback) toast('Assemble failed: ' + err); return; }
-        if (resp && resp.ok) {
-          if (showFeedback) toast('Pushed ' + data.tasks.length + ' tasks (' + Math.round(payload.length/1024) + 'KB)');
-        } else {
-          if (showFeedback) toast('Assemble error: ' + (resp && resp.error || 'unknown'));
-        }
+        if (err) { if (showFeedback) toast('Assemble failed: ' + err); }
+        else if (resp && resp.ok) { if (showFeedback) toast('Pushed ' + data.tasks.length + ' tasks (' + Math.round(payload.length/1024) + 'KB)'); }
+        else { if (showFeedback) toast('Assemble error: ' + (resp && resp.error || 'unknown')); }
+        syncDone();
       });
       return;
     }
     jsonpFetch(ep + '?action=save_chunk&i=' + idx + '&n=' + total + '&c=' + encodeURIComponent(chunks[idx]), function(err, resp) {
       if (err || !resp || !resp.ok) {
-        _syncing = false;
         if (showFeedback) toast('Push failed at part ' + (idx+1) + '/' + total + ': ' + (err || (resp && resp.error) || 'error'));
+        syncDone();
         return;
       }
       sendChunk(idx + 1);
