@@ -1190,7 +1190,7 @@ function renderTasks() {
     const id = card.dataset.id;
     attachSwipe(card, id);
   });
-  // Attach swipe-to-delete on spacers
+  // Attach swipe-to-delete + triple-click-to-delete on spacers
   taskList.querySelectorAll('.section-spacer').forEach(spacer => {
     const id = spacer.dataset.id;
     let startX = 0;
@@ -1204,6 +1204,14 @@ function renderTasks() {
       if (dx < -80) { deleteTask(id); }
       else { spacer.style.transform = ''; spacer.style.opacity = ''; }
     }, {passive:true});
+    // Triple-click to delete (desktop)
+    let _tapCount = 0, _tapTimer = null;
+    spacer.addEventListener('click', () => {
+      _tapCount++;
+      clearTimeout(_tapTimer);
+      if (_tapCount >= 3) { _tapCount = 0; deleteTask(id); return; }
+      _tapTimer = setTimeout(() => { _tapCount = 0; }, 500);
+    });
   });
 
   // Attach drag handlers
