@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html><head><title>Cache Bust</title></head>
+<body>
+<h2>Clearing cache...</h2>
+<script>
+(async function() {
+  // Unregister all service workers
+  const regs = await navigator.serviceWorker.getRegistrations();
+  for (const r of regs) await r.unregister();
+  // Delete all caches
+  const keys = await caches.keys();
+  for (const k of keys) await caches.delete(k);
+  document.querySelector('h2').textContent = 'Done! Redirecting...';
+  setTimeout(function() { window.location.href = './index.html'; }, 1000);
+})();
+</script>
+</body>
+</html>
