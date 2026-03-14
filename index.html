@@ -2788,22 +2788,12 @@ function syncToCloud() {
           }
           var allDeleted = new Set(data.deletedIds);
           data.tasks = data.tasks.filter(function(t) { return !cloudDeleted.has(t.id); });
-          var localMap = {};
-          data.tasks.forEach(function(t) { if (t.id) localMap[t.id] = t; });
+          // Only add new tasks from cloud — local wins for existing tasks (user just edited)
+          var localIds = new Set(data.tasks.map(function(t) { return t.id; }));
           for (var i = 0; i < cloud.tasks.length; i++) {
             var ct = cloud.tasks[i];
-            if (!ct.id || allDeleted.has(ct.id)) continue;
-            if (localMap[ct.id]) {
-              // Update local with cloud version if cloud is newer
-              var localJ = JSON.stringify(localMap[ct.id]);
-              var cloudJ = JSON.stringify(ct);
-              if (localJ !== cloudJ) {
-                var idx = data.tasks.indexOf(localMap[ct.id]);
-                if (idx >= 0) data.tasks[idx] = ct;
-              }
-            } else {
-              data.tasks.push(ct);
-            }
+            if (!ct.id || allDeleted.has(ct.id) || localIds.has(ct.id)) continue;
+            data.tasks.push(ct);
           }
           data.tasks.sort(function(a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
