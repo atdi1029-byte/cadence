@@ -2714,9 +2714,9 @@ function _doSync(showFeedback) {
 
   function syncDone(ok, msg) {
     _syncing = false;
-    if (ok && showFeedback) toast('Pushed ' + data.tasks.length + ' tasks');
-    else if (ok) toast('Synced', null, 1500);
-    else toast('Sync failed: ' + (msg || 'unknown'), null, 4000);
+    if (ok && showFeedback) toast('Pushed ' + data.tasks.length + ' tasks', null, 3000);
+    else if (ok) toast('Cloud saved', null, 2500);
+    else toast('Sync failed: ' + (msg || 'unknown'), null, 5000);
     if (_pendingResync) {
       _pendingResync = false;
       setTimeout(function() { _doSync(false); }, 1000);
