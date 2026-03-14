@@ -2665,8 +2665,9 @@ function clearHistory() {
 }
 
 // ===== CLOUD SYNC =====
+var SYNC_URL = 'https://script.google.com/macros/s/AKfycbwBjPZ1KFp5sxcS3AzhdjelCLEvk5v4NyuewImtRlhWsr6-JHhju8-zcaI6wdXWozlNpg/exec';
 function getSyncUrl() {
-  return (data && data.settings && data.settings.syncUrl) || '';
+  return SYNC_URL;
 }
 
 // JSONP helper — bypasses CORS by loading script tag (same as proven load mechanism)
