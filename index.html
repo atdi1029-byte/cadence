@@ -2691,30 +2691,17 @@ function jsonpFetch(url, callback) {
   document.head.appendChild(script);
 }
 
-// Fire POST to GAS using multiple methods for reliability
-function postToGas(ep, payload) {
-  // Method 1: fetch POST no-cors
-  fetch(ep, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {'Content-Type': 'text/plain'},
-    body: payload
-  }).catch(function() {});
-
-  // Method 2: sendBeacon (different browser pathway, very reliable for fire-and-forget)
-  if (navigator.sendBeacon) {
-    try {
-      navigator.sendBeacon(ep, new Blob([payload], {type: 'text/plain'}));
-    } catch(e) {}
-  }
-
-  // Method 3: XHR (yet another browser pathway)
-  try {
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', ep, true);
-    xhr.setRequestHeader('Content-Type', 'text/plain');
-    xhr.send(payload);
-  } catch(e) {}
+// Build cloud-safe payload: strip history + freq (local-only, too large for Sheets 50K cell limit)
+function getSyncPayload() {
+  return JSON.stringify({
+    tasks: data.tasks || [],
+    templates: data.templates || [],
+    settings: data.settings || {},
+    monthly: data.monthly || {},
+    weekly: data.weekly || {},
+    lastModified: data.lastModified || 0,
+    deletedIds: data.deletedIds || []
+  });
 }
 
 // Auto-sync: push immediately on every saveData() call
@@ -2723,8 +2710,14 @@ function syncToCloud() {
   var ep = getSyncUrl();
   if (!ep) return;
   if (!data.tasks || data.tasks.length === 0) return;
-  var payload = JSON.stringify({ action: 'save', data: JSON.stringify(data) });
-  postToGas(ep, payload);
+  var syncData = getSyncPayload();
+  var payload = JSON.stringify({ action: 'save', data: syncData });
+  fetch(ep, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {'Content-Type': 'text/plain'},
+    body: payload
+  }).catch(function() {});
 }
 
 // Manual Push to Cloud: push then verify
@@ -2733,29 +2726,37 @@ function doSync(showFeedback) {
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
   if (showFeedback) toast('Pushing...');
   var taskCount = data.tasks.length;
-  var payload = JSON.stringify({ action: 'save', data: JSON.stringify(data) });
-  postToGas(ep, payload);
-
-  if (!showFeedback) return;
-  // Verify after 3 seconds
-  setTimeout(function() {
-    jsonpFetch(ep + '?action=load', function(err2, resp2) {
-      if (err2 || !resp2 || !resp2.ok || !resp2.data) {
-        showSyncWarning(true);
-        toast('Cloud save may have failed');
-        return;
-      }
-      var check;
-      try { check = typeof resp2.data === 'string' ? JSON.parse(resp2.data) : resp2.data; } catch(e) {}
-      if (check && check.tasks && check.lastModified >= data.lastModified) {
-        showSyncWarning(false);
-        toast('Synced ' + taskCount + ' tasks');
-      } else {
-        showSyncWarning(true);
-        toast('Sync may have failed — try again');
-      }
-    });
-  }, 3000);
+  var syncData = getSyncPayload();
+  var payload = JSON.stringify({ action: 'save', data: syncData });
+  fetch(ep, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {'Content-Type': 'text/plain'},
+    body: payload
+  }).then(function() {
+    if (!showFeedback) return;
+    setTimeout(function() {
+      jsonpFetch(ep + '?action=load', function(err2, resp2) {
+        if (err2 || !resp2 || !resp2.ok || !resp2.data) {
+          showSyncWarning(true);
+          toast('Cloud save may have failed');
+          return;
+        }
+        var check;
+        try { check = typeof resp2.data === 'string' ? JSON.parse(resp2.data) : resp2.data; } catch(e) {}
+        if (check && check.tasks && check.tasks.length >= taskCount) {
+          showSyncWarning(false);
+          toast('Synced ' + taskCount + ' tasks');
+        } else {
+          showSyncWarning(true);
+          toast('Sync may have failed — try again');
+        }
+      });
+    }, 3000);
+  }).catch(function(e) {
+    showSyncWarning(true);
+    if (showFeedback) toast('Sync failed: ' + e.message);
+  });
 }
 
 function showSyncWarning(show) {
@@ -2830,8 +2831,7 @@ function init() {
     localStorage.removeItem('cadence_sync_url');
   }
 
-  // Rule 4: On open, restore ONLY if localStorage is empty (recovery path)
-  // Don't auto-pull if we have local data — saves must work first
+  // Rule 4: On open, restore from cloud if localStorage is empty (recovery path)
   var ep = getSyncUrl();
   if (ep && (!data.tasks || data.tasks.length === 0)) {
     jsonpFetch(ep + '?action=load', function(err, resp) {
@@ -2840,9 +2840,17 @@ function init() {
         try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
         if (cloud && cloud.tasks && cloud.tasks.length > 0) {
           var localSyncUrl = ep;
+          // Preserve local history/freq (not synced to cloud)
+          var localHistory = data.history || [];
+          var localFreq = data.freq || {};
           data = cloud;
+          data.history = localHistory;
+          data.freq = localFreq;
           if (!data.settings) data.settings = {};
           data.settings.syncUrl = localSyncUrl;
+          if (!data.templates) data.templates = [];
+          if (!data.monthly) data.monthly = {items:[], done:{}};
+          if (!data.weekly) data.weekly = {items:[], log:{}};
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
           renderTasks();
           renderSuggestions();
