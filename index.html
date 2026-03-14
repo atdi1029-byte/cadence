@@ -2700,8 +2700,8 @@ function syncToCloud() {
   _syncTimer = setTimeout(_doSync, 2000);
 }
 
-// Save via JSONP GET — same proven mechanism as loads, with real confirmation
-// Falls back to POST for payloads too large for URL (>7000 chars encoded)
+// Save via JSONP GET — chunked for large payloads
+// Small payloads: single JSONP GET. Large: split into chunks, send sequentially, finalize.
 function _doSync(showFeedback) {
   _syncTimer = null;
   if (_syncing) { _pendingResync = true; return; }
@@ -2715,8 +2715,7 @@ function _doSync(showFeedback) {
   function syncDone(ok, msg) {
     _syncing = false;
     if (ok && showFeedback) toast('Pushed ' + data.tasks.length + ' tasks', null, 3000);
-    else if (ok && !showFeedback) { /* silent success */ }
-    else if (!ok) toast('Sync failed: ' + (msg || 'unknown'), null, 5000);
+    if (!ok) toast('Sync failed: ' + (msg || 'unknown'), null, 5000);
     if (_pendingResync) {
       _pendingResync = false;
       setTimeout(function() { _doSync(false); }, 1000);
@@ -2724,38 +2723,36 @@ function _doSync(showFeedback) {
   }
 
   if (encoded.length < 7000) {
-    // JSONP save — GET with callback, real confirmation
-    var saveUrl = ep + '?action=save&data=' + encoded;
-    jsonpFetch(saveUrl, function(err, resp) {
-      if (err) { syncDone(false, 'save failed: ' + err); return; }
-      if (resp && resp.ok) { syncDone(true); }
-      else { syncDone(false, (resp && resp.error) || 'save error'); }
+    // Small payload — single JSONP save
+    jsonpFetch(ep + '?action=save&data=' + encoded, function(err, resp) {
+      if (err) { syncDone(false, 'save: ' + err); return; }
+      syncDone(resp && resp.ok, (resp && resp.error) || 'save error');
     });
   } else {
-    // Payload too large for URL — use POST fallback
-    fetch(ep, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'data=' + encoded
-    }).then(function() {
-      if (showFeedback) {
-        // Verify POST landed via JSONP load
-        setTimeout(function() {
-          jsonpFetch(ep + '?action=load', function(err, resp) {
-            if (err) { syncDone(false, 'verify failed: ' + err); return; }
-            var cloud;
-            try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e2) {}
-            var ok = cloud && cloud.tasks && cloud.tasks.length === data.tasks.length;
-            syncDone(ok, ok ? null : 'POST verify mismatch');
-          });
-        }, 2000);
-      } else {
-        syncDone(true);
+    // Large payload — chunked JSONP save
+    var CHUNK_SIZE = 3000;
+    var chunks = [];
+    for (var i = 0; i < payload.length; i += CHUNK_SIZE) {
+      chunks.push(payload.substring(i, i + CHUNK_SIZE));
+    }
+
+    function sendChunk(idx) {
+      if (idx >= chunks.length) {
+        // All chunks sent — finalize
+        jsonpFetch(ep + '?action=save_done&n=' + chunks.length, function(err, resp) {
+          if (err) { syncDone(false, 'finalize: ' + err); return; }
+          syncDone(resp && resp.ok, (resp && resp.error) || 'finalize error');
+        });
+        return;
       }
-    }).catch(function(err) {
-      syncDone(false, err.message || 'POST failed');
-    });
+      var chunkEncoded = encodeURIComponent(chunks[idx]);
+      jsonpFetch(ep + '?action=save_chunk&i=' + idx + '&c=' + chunkEncoded, function(err, resp) {
+        if (err) { syncDone(false, 'chunk ' + idx + ': ' + err); return; }
+        if (!resp || !resp.ok) { syncDone(false, 'chunk ' + idx + ' error'); return; }
+        sendChunk(idx + 1);
+      });
+    }
+    sendChunk(0);
   }
 }
 
