@@ -2792,11 +2792,10 @@ function loadFromCloud(showToast, onComplete) {
       if (onComplete) onComplete();
       return;
     }
-    // Manual restore: always apply cloud data (skip "already up to date" check)
-    // Auto-sync: skip if tasks match or local is newer
+    // Manual restore: always apply cloud data
+    // Auto-sync: skip only if tasks already match
     if (!showToast) {
       if (JSON.stringify(data.tasks) === JSON.stringify(cloud.tasks)) { if (onComplete) onComplete(); return; }
-      if (data.lastModified && (!cloud.lastModified || data.lastModified >= cloud.lastModified)) { if (onComplete) onComplete(); return; }
     }
 
     data = cloud;
