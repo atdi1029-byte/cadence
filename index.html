@@ -2700,13 +2700,8 @@ function syncToCloud() {
   _syncTimer = setTimeout(_doSync, 2000);
 }
 
-// fireGet: img-based GET to bypass mobile CORS redirect issues with Apps Script
-function fireGet(url) {
-  var img = new Image();
-  img.src = url;
-}
-
-// Save via fireGet (GET) — bypasses mobile CORS redirect that kills POST no-cors
+// Save via JSONP (GET with callback) — CORS-free, confirmed response, works on mobile
+// Uses chunking for large payloads (GET URLs have ~2KB limit)
 function _doSync(showFeedback) {
   _syncTimer = null;
   if (_syncing) { _pendingResync = true; return; }
@@ -2718,55 +2713,54 @@ function _doSync(showFeedback) {
 
   function syncDone(ok, msg) {
     _syncing = false;
-    if (ok) toast('Synced', null, 1500);
-    else if (msg) toast('Sync: ' + msg, null, 3000);
+    if (ok && showFeedback) toast('Pushed ' + data.tasks.length + ' tasks');
+    else if (ok) toast('Synced', null, 1500);
+    else toast('Sync failed: ' + (msg || 'unknown'), null, 4000);
     if (_pendingResync) {
       _pendingResync = false;
       setTimeout(function() { _doSync(false); }, 1000);
     }
   }
 
-  // Chunk the payload for GET URL length limits (~2KB per chunk)
   var encoded = encodeURIComponent(payload);
-  var CHUNK = 1800;
+
+  // Small payload — single confirmed JSONP save
+  if (encoded.length < 1500) {
+    jsonpFetch(ep + '?action=save&data=' + encoded, function(err, resp) {
+      if (err) { syncDone(false, err); return; }
+      syncDone(!!(resp && resp.ok), resp && resp.error);
+    });
+    return;
+  }
+
+  // Large payload — sequential confirmed JSONP chunk writes
+  var CHUNK = 1400;
   var chunks = [];
   for (var i = 0; i < encoded.length; i += CHUNK) {
     chunks.push(encoded.substring(i, i + CHUNK));
   }
 
-  if (chunks.length === 1) {
-    // Small payload — single GET request
-    fireGet(ep + '?action=save&data=' + encoded);
-  } else {
-    // Large payload — chunked GET requests
-    for (var j = 0; j < chunks.length; j++) {
-      fireGet(ep + '?action=save_chunk&i=' + j + '&c=' + chunks[j]);
+  var chunkIdx = 0;
+  function sendNextChunk() {
+    if (chunkIdx >= chunks.length) {
+      // All chunks sent — finalize
+      jsonpFetch(ep + '?action=save_done&n=' + chunks.length, function(err, resp) {
+        if (err) { syncDone(false, 'save_done failed: ' + err); return; }
+        syncDone(!!(resp && resp.ok), resp && resp.error);
+      });
+      return;
     }
-    setTimeout(function() {
-      fireGet(ep + '?action=save_done&n=' + chunks.length);
-    }, chunks.length * 200 + 500);
-  }
-
-  if (!showFeedback) {
-    // Silent sync — assume success after firing
-    setTimeout(function() { syncDone(true); }, 1000);
-    return;
-  }
-
-  // Manual push: verify with JSONP load after a delay
-  setTimeout(function() {
-    jsonpFetch(ep + '?action=load', function(err, resp) {
-      var ok = false;
-      if (!err && resp && resp.ok && resp.data) {
-        var cloud;
-        try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
-        ok = cloud && cloud.tasks && cloud.tasks.length === data.tasks.length;
+    var url = ep + '?action=save_chunk&i=' + chunkIdx + '&c=' + chunks[chunkIdx];
+    jsonpFetch(url, function(err, resp) {
+      if (err || !resp || !resp.ok) {
+        syncDone(false, 'chunk ' + chunkIdx + ' failed');
+        return;
       }
-      _syncing = false;
-      toast(ok ? 'Pushed ' + data.tasks.length + ' tasks' : 'Push may have failed');
-      if (_pendingResync) { _pendingResync = false; setTimeout(function() { _doSync(false); }, 1000); }
+      chunkIdx++;
+      sendNextChunk();
     });
-  }, chunks.length > 1 ? (chunks.length * 200 + 2000) : 2000);
+  }
+  sendNextChunk();
 }
 
 function loadFromCloud(showToast, onComplete) {
