@@ -79,7 +79,7 @@ function handleSave(dataStr) {
 function handleSaveChunk(e) {
   try {
     var idx = parseInt(e.parameter.i || '0');
-    var chunk = e.parameter.c || '';
+    var chunk = e.parameter.cd || '';
     if (!chunk) return jsonOut({ok: false, error: 'No chunk data'});
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();

@@ -2751,7 +2751,7 @@ function _doCloudSave(ep, showFeedback) {
   // Fire all chunks in parallel via JSONP GET
   for (var j = 0; j < chunks.length; j++) {
     (function(idx) {
-      var url = ep + '?action=save_chunk&i=' + idx + '&c=' + encodeURIComponent(chunks[idx]);
+      var url = ep + '?action=save_chunk&i=' + idx + '&cd=' + encodeURIComponent(chunks[idx]);
       jsonpFetch(url, function(err, resp) {
         onChunkDone(err || (!resp || !resp.ok ? 'chunk error' : null));
       });
