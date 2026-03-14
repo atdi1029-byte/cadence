@@ -828,6 +828,7 @@ function loadData() {
     if (!data.monthly) data.monthly = {items:[], done:{}};
     if (!data.weekly) data.weekly = {items:[], log:{}};
     if (!data.settings) data.settings = {};
+    data.tasks.sort(function(a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
   } catch(e) {
     data = {
       tasks: [],
