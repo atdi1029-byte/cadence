@@ -2814,46 +2814,38 @@ function init() {
     localStorage.removeItem('cadence_sync_url');
   }
 
-  // Rule 4: On open, pull from Sheets (source of truth)
-  // syncReady stays false until load completes — prevents empty data racing to cloud
-  setTimeout(function() {
-    var ep = getSyncUrl();
-    if (!ep) { syncReady = true; return; }
-    var localSyncUrl = ep;
+  // Rule 4: On open, restore ONLY if localStorage is empty (recovery path)
+  // Don't auto-pull if we have local data — saves must work first
+  var ep = getSyncUrl();
+  if (ep && (!data.tasks || data.tasks.length === 0)) {
     jsonpFetch(ep + '?action=load', function(err, resp) {
       if (!err && resp && resp.ok && resp.data) {
         var cloud;
         try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
-        if (cloud && cloud.tasks) {
-          var localEmpty = !data.tasks || data.tasks.length === 0;
-          if (localEmpty || (cloud.lastModified && cloud.lastModified > (data.lastModified || 0))) {
-            data = cloud;
-            if (!data.settings) data.settings = {};
-            data.settings.syncUrl = localSyncUrl;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-            renderTasks();
-            renderSuggestions();
-            renderTemplateSuggestions();
-          }
+        if (cloud && cloud.tasks && cloud.tasks.length > 0) {
+          var localSyncUrl = ep;
+          data = cloud;
+          if (!data.settings) data.settings = {};
+          data.settings.syncUrl = localSyncUrl;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          renderTasks();
+          renderSuggestions();
+          renderTemplateSuggestions();
         }
       }
       syncReady = true;
     });
-  }, 1500);
-  // Safety: force syncReady after 10s even if cloud load hangs
-  setTimeout(function() { if (!syncReady) syncReady = true; }, 10000);
+  } else {
+    syncReady = true;
+  }
 
   // Register service worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js', {updateViaCache: 'none'});
   }
 
-  // Auto-pull from cloud when app resumes (tab/app switch)
-  document.addEventListener('visibilitychange', function() {
-    if (!document.hidden && syncReady) {
-      loadFromCloud(false);
-    }
-  });
+  // Auto-pull disabled until saves are confirmed working
+  // Re-enable once POST text/plain reliably reaches GAS from all devices
 
   // Auto-refresh theme every minute
   setInterval(function() {
