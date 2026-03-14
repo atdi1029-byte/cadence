@@ -2691,89 +2691,54 @@ function jsonpFetch(url, callback) {
   document.head.appendChild(script);
 }
 
+// Auto-sync: just push immediately — no pull, no verify, no delay
 function syncToCloud() {
   if (!syncReady) return;
   var ep = getSyncUrl();
   if (!ep) return;
   if (!data.tasks || data.tasks.length === 0) return;
-  clearTimeout(_syncTimer);
-  doSync(false);
+  fetch(ep, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {'Content-Type': 'text/plain'},
+    body: JSON.stringify({ action: 'save', data: JSON.stringify(data) })
+  }).catch(function() {});
 }
 
+// Manual Push to Cloud: push then verify
 function doSync(showFeedback) {
-  _syncTimer = null;
   var ep = getSyncUrl();
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
-  if (showFeedback) toast('Syncing...');
-
-  // Step 1: Pull latest from sheet first
-  jsonpFetch(ep + '?action=load', function(err, resp) {
-    var cloud = null;
-    if (!err && resp && resp.ok && resp.data) {
-      try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
-    }
-
-    // Step 2: Merge — add any cloud tasks we don't have locally
-    if (cloud && cloud.tasks && cloud.tasks.length > 0) {
-      var localIds = {};
-      data.tasks.forEach(function(t) { localIds[t.id] = true; });
-      var merged = 0;
-      for (var i = 0; i < cloud.tasks.length; i++) {
-        var ct = cloud.tasks[i];
-        if (ct.id && !localIds[ct.id]) {
-          data.tasks.push(ct);
-          merged++;
+  if (showFeedback) toast('Pushing...');
+  var taskCount = data.tasks.length;
+  fetch(ep, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {'Content-Type': 'text/plain'},
+    body: JSON.stringify({ action: 'save', data: JSON.stringify(data) })
+  }).then(function() {
+    if (!showFeedback) return;
+    setTimeout(function() {
+      jsonpFetch(ep + '?action=load', function(err2, resp2) {
+        if (err2 || !resp2 || !resp2.ok || !resp2.data) {
+          showSyncWarning(true);
+          toast('Cloud save may have failed');
+          return;
         }
-      }
-      // Merge templates, settings (keep local syncUrl)
-      if (cloud.templates && cloud.templates.length > 0) {
-        var localTmplIds = {};
-        (data.templates || []).forEach(function(t) { localTmplIds[t.id] = true; });
-        for (var j = 0; j < cloud.templates.length; j++) {
-          if (cloud.templates[j].id && !localTmplIds[cloud.templates[j].id]) {
-            data.templates.push(cloud.templates[j]);
-          }
+        var check;
+        try { check = typeof resp2.data === 'string' ? JSON.parse(resp2.data) : resp2.data; } catch(e) {}
+        if (check && check.tasks) {
+          showSyncWarning(false);
+          toast('Synced ' + taskCount + ' tasks');
+        } else {
+          showSyncWarning(true);
+          toast('Sync may have failed');
         }
-      }
-      if (merged > 0) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-        renderTasks();
-        renderSuggestions();
-      }
-    }
-
-    // Step 3: Push merged data to sheet
-    var payload = JSON.stringify(data);
-    var taskCount = data.tasks.length;
-    fetch(ep, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {'Content-Type': 'text/plain'},
-      body: JSON.stringify({ action: 'save', data: payload })
-    }).then(function() {
-      // Verify save worked
-      setTimeout(function() {
-        jsonpFetch(ep + '?action=load', function(err2, resp2) {
-          if (err2 || !resp2 || !resp2.ok || !resp2.data) {
-            showSyncWarning(true);
-            if (showFeedback) toast('Cloud save may have failed');
-            return;
-          }
-          var check;
-          try { check = typeof resp2.data === 'string' ? JSON.parse(resp2.data) : resp2.data; } catch(e) {}
-          if (check && check.tasks && check.tasks.length >= taskCount) {
-            showSyncWarning(false);
-            if (showFeedback) toast('Synced ' + taskCount + ' tasks');
-          } else {
-            showSyncWarning(true);
-            if (showFeedback) toast('Sync may have failed');
-          }
-        });
-      }, 2500);
-    }).catch(function(e) {
-      showSyncWarning(true);
-      if (showFeedback) toast('Sync failed: ' + e.message);
-    });
+      });
+    }, 4000);
+  }).catch(function(e) {
+    showSyncWarning(true);
+    if (showFeedback) toast('Sync failed: ' + e.message);
   });
 }
 
@@ -2889,13 +2854,6 @@ function init() {
       loadFromCloud(false);
     }
   });
-
-  // Poll cloud every 30s so changes from other devices appear without switching tabs
-  setInterval(function() {
-    if (syncReady && !document.hidden) {
-      loadFromCloud(false);
-    }
-  }, 30000);
 
   // Auto-refresh theme every minute
   setInterval(function() {
