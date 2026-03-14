@@ -2700,8 +2700,9 @@ function syncToCloud() {
   _syncTimer = setTimeout(_doSync, 2000);
 }
 
-// Save via JSONP (GET with callback) — CORS-free, confirmed response, works on mobile
-// Uses chunking for large payloads (GET URLs have ~2KB limit)
+// Save via hidden form POST to iframe — bypasses CORS entirely (not fetch/XHR)
+// HTML form submissions follow redirects naturally and work on all devices
+// Then verify with JSONP load to confirm it actually saved
 function _doSync(showFeedback) {
   _syncTimer = null;
   if (_syncing) { _pendingResync = true; return; }
@@ -2722,45 +2723,44 @@ function _doSync(showFeedback) {
     }
   }
 
-  var encoded = encodeURIComponent(payload);
+  // Create hidden iframe + form for POST submission
+  var iframeName = '_csync_' + Date.now();
+  var iframe = document.createElement('iframe');
+  iframe.name = iframeName;
+  iframe.style.display = 'none';
+  document.body.appendChild(iframe);
 
-  // Small payload — single confirmed JSONP save
-  if (encoded.length < 1500) {
-    jsonpFetch(ep + '?action=save&data=' + encoded, function(err, resp) {
-      if (err) { syncDone(false, err); return; }
-      syncDone(!!(resp && resp.ok), resp && resp.error);
+  var form = document.createElement('form');
+  form.method = 'POST';
+  form.action = ep;
+  form.target = iframeName;
+  form.style.display = 'none';
+
+  var input = document.createElement('input');
+  input.type = 'hidden';
+  input.name = 'data';
+  input.value = payload;
+  form.appendChild(input);
+
+  document.body.appendChild(form);
+  form.submit();
+
+  // Clean up after 8s
+  setTimeout(function() {
+    try { form.remove(); iframe.remove(); } catch(e) {}
+  }, 8000);
+
+  // Verify save via JSONP load after 3s
+  setTimeout(function() {
+    jsonpFetch(ep + '?action=load', function(err, resp) {
+      if (err) { syncDone(false, 'verify failed: ' + err); return; }
+      if (!resp || !resp.ok) { syncDone(false, 'verify error'); return; }
+      var cloud;
+      try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
+      var ok = cloud && cloud.tasks && cloud.tasks.length === data.tasks.length;
+      syncDone(ok, ok ? null : 'data mismatch (cloud: ' + (cloud && cloud.tasks ? cloud.tasks.length : 0) + ', local: ' + data.tasks.length + ')');
     });
-    return;
-  }
-
-  // Large payload — sequential confirmed JSONP chunk writes
-  var CHUNK = 1400;
-  var chunks = [];
-  for (var i = 0; i < encoded.length; i += CHUNK) {
-    chunks.push(encoded.substring(i, i + CHUNK));
-  }
-
-  var chunkIdx = 0;
-  function sendNextChunk() {
-    if (chunkIdx >= chunks.length) {
-      // All chunks sent — finalize
-      jsonpFetch(ep + '?action=save_done&n=' + chunks.length, function(err, resp) {
-        if (err) { syncDone(false, 'save_done failed: ' + err); return; }
-        syncDone(!!(resp && resp.ok), resp && resp.error);
-      });
-      return;
-    }
-    var url = ep + '?action=save_chunk&i=' + chunkIdx + '&c=' + chunks[chunkIdx];
-    jsonpFetch(url, function(err, resp) {
-      if (err || !resp || !resp.ok) {
-        syncDone(false, 'chunk ' + chunkIdx + ' failed');
-        return;
-      }
-      chunkIdx++;
-      sendNextChunk();
-    });
-  }
-  sendNextChunk();
+  }, 3000);
 }
 
 function loadFromCloud(showToast, onComplete) {
