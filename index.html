@@ -2794,6 +2794,7 @@ function syncToCloud() {
               data.tasks.push(ct);
             }
           }
+          data.tasks.sort(function(a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         }
       }
@@ -2874,6 +2875,7 @@ function mergeFromCloud(showToast) {
     }
 
     if (merged > 0 || data.tasks.length !== beforeCount) {
+      data.tasks.sort(function(a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
       data.lastModified = Date.now();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       renderTasks();
@@ -2973,6 +2975,7 @@ function init() {
           }
         }
         if (merged > 0) {
+          data.tasks.sort(function(a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
           data.lastModified = Date.now();
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
           renderTasks();
