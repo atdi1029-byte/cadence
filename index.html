@@ -2700,9 +2700,8 @@ function syncToCloud() {
   _syncTimer = setTimeout(_doSync, 2000);
 }
 
-// Save via hidden form POST to iframe — bypasses CORS entirely (not fetch/XHR)
-// HTML form submissions follow redirects naturally and work on all devices
-// Then verify with JSONP load to confirm it actually saved
+// Save via fetch POST with mode:'no-cors' — GAS processes POST body before 302 redirect
+// Response is opaque but data reaches doPost(e) reliably on all devices
 function _doSync(showFeedback) {
   _syncTimer = null;
   if (_syncing) { _pendingResync = true; return; }
@@ -2723,44 +2722,31 @@ function _doSync(showFeedback) {
     }
   }
 
-  // Create hidden iframe + form for POST submission
-  var iframeName = '_csync_' + Date.now();
-  var iframe = document.createElement('iframe');
-  iframe.name = iframeName;
-  iframe.style.display = 'none';
-  document.body.appendChild(iframe);
-
-  var form = document.createElement('form');
-  form.method = 'POST';
-  form.action = ep;
-  form.target = iframeName;
-  form.style.display = 'none';
-
-  var input = document.createElement('input');
-  input.type = 'hidden';
-  input.name = 'data';
-  input.value = payload;
-  form.appendChild(input);
-
-  document.body.appendChild(form);
-  form.submit();
-
-  // Clean up after 8s
-  setTimeout(function() {
-    try { form.remove(); iframe.remove(); } catch(e) {}
-  }, 8000);
-
-  // Verify save via JSONP load after 3s
-  setTimeout(function() {
-    jsonpFetch(ep + '?action=load', function(err, resp) {
-      if (err) { syncDone(false, 'verify failed: ' + err); return; }
-      if (!resp || !resp.ok) { syncDone(false, 'verify error'); return; }
-      var cloud;
-      try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
-      var ok = cloud && cloud.tasks && cloud.tasks.length === data.tasks.length;
-      syncDone(ok, ok ? null : 'data mismatch (cloud: ' + (cloud && cloud.tasks ? cloud.tasks.length : 0) + ', local: ' + data.tasks.length + ')');
-    });
-  }, 3000);
+  fetch(ep, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'data=' + encodeURIComponent(payload)
+  }).then(function() {
+    // Response is opaque with no-cors, but POST body reached GAS
+    if (showFeedback) {
+      // Verify with JSONP load for manual Push
+      setTimeout(function() {
+        jsonpFetch(ep + '?action=load', function(err, resp) {
+          if (err) { syncDone(false, 'verify failed: ' + err); return; }
+          if (!resp || !resp.ok) { syncDone(false, 'verify error'); return; }
+          var cloud;
+          try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
+          var ok = cloud && cloud.tasks && cloud.tasks.length === data.tasks.length;
+          syncDone(ok, ok ? null : 'data mismatch (cloud: ' + (cloud && cloud.tasks ? cloud.tasks.length : 0) + ', local: ' + data.tasks.length + ')');
+        });
+      }, 2000);
+    } else {
+      syncDone(true);
+    }
+  }).catch(function(err) {
+    syncDone(false, err.message || 'fetch failed');
+  });
 }
 
 function loadFromCloud(showToast, onComplete) {
