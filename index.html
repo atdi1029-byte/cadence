@@ -2704,59 +2704,79 @@ function getSyncPayload() {
   });
 }
 
-// Auto-sync: push immediately on every saveData() call
+// JSONP chunked save — splits data into GET requests (bypasses POST blocks on desktop)
+var _saveInFlight = false;
+var _savePending = false;
+var _syncDebounce = null;
+
+function _doCloudSave(ep, showFeedback) {
+  if (_saveInFlight) { _savePending = true; return; }
+  _saveInFlight = true;
+
+  var syncData = getSyncPayload();
+  var CHUNK_SIZE = 3000;
+  var chunks = [];
+  for (var i = 0; i < syncData.length; i += CHUNK_SIZE) {
+    chunks.push(syncData.substring(i, i + CHUNK_SIZE));
+  }
+
+  if (showFeedback) toast('Syncing ' + data.tasks.length + ' tasks...');
+
+  var completed = 0;
+  var anyFailed = false;
+
+  function onChunkDone(err) {
+    if (err) anyFailed = true;
+    completed++;
+    if (completed < chunks.length) return;
+    if (anyFailed) {
+      _saveInFlight = false;
+      if (showFeedback) { showSyncWarning(true); toast('Sync failed — chunks did not save'); }
+      if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 2000); }
+      return;
+    }
+    // All chunks saved — assemble
+    jsonpFetch(ep + '?action=save_done&n=' + chunks.length, function(err2, resp2) {
+      _saveInFlight = false;
+      if (!err2 && resp2 && resp2.ok) {
+        showSyncWarning(false);
+        if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
+      } else {
+        if (showFeedback) { showSyncWarning(true); toast('Sync assembly failed'); }
+      }
+      if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 1000); }
+    });
+  }
+
+  // Fire all chunks in parallel via JSONP GET
+  for (var j = 0; j < chunks.length; j++) {
+    (function(idx) {
+      var url = ep + '?action=save_chunk&i=' + idx + '&c=' + encodeURIComponent(chunks[idx]);
+      jsonpFetch(url, function(err, resp) {
+        onChunkDone(err || (!resp || !resp.ok ? 'chunk error' : null));
+      });
+    })(j);
+  }
+}
+
+// Auto-sync: debounce 1.5s then save via JSONP chunks
 function syncToCloud() {
   if (!syncReady) return;
   var ep = getSyncUrl();
   if (!ep) return;
   if (!data.tasks || data.tasks.length === 0) return;
-  var syncData = getSyncPayload();
-  var payload = JSON.stringify({ action: 'save', data: syncData });
-  fetch(ep, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {'Content-Type': 'text/plain'},
-    body: payload
-  }).catch(function() {});
+  clearTimeout(_syncDebounce);
+  _syncDebounce = setTimeout(function() {
+    _doCloudSave(ep, false);
+  }, 1500);
 }
 
-// Manual Push to Cloud: push then verify
+// Manual Push to Cloud: save + verify
 function doSync(showFeedback) {
   var ep = getSyncUrl();
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
-  if (showFeedback) toast('Pushing...');
-  var taskCount = data.tasks.length;
-  var syncData = getSyncPayload();
-  var payload = JSON.stringify({ action: 'save', data: syncData });
-  fetch(ep, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {'Content-Type': 'text/plain'},
-    body: payload
-  }).then(function() {
-    if (!showFeedback) return;
-    setTimeout(function() {
-      jsonpFetch(ep + '?action=load', function(err2, resp2) {
-        if (err2 || !resp2 || !resp2.ok || !resp2.data) {
-          showSyncWarning(true);
-          toast('Cloud save may have failed');
-          return;
-        }
-        var check;
-        try { check = typeof resp2.data === 'string' ? JSON.parse(resp2.data) : resp2.data; } catch(e) {}
-        if (check && check.tasks && check.tasks.length >= taskCount) {
-          showSyncWarning(false);
-          toast('Synced ' + taskCount + ' tasks');
-        } else {
-          showSyncWarning(true);
-          toast('Sync may have failed — try again');
-        }
-      });
-    }, 3000);
-  }).catch(function(e) {
-    showSyncWarning(true);
-    if (showFeedback) toast('Sync failed: ' + e.message);
-  });
+  clearTimeout(_syncDebounce);
+  _doCloudSave(ep, showFeedback);
 }
 
 function showSyncWarning(show) {
