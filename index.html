@@ -2691,18 +2691,40 @@ function jsonpFetch(url, callback) {
   document.head.appendChild(script);
 }
 
-// Auto-sync: just push immediately — no pull, no verify, no delay
+// Fire POST to GAS using multiple methods for reliability
+function postToGas(ep, payload) {
+  // Method 1: fetch POST no-cors
+  fetch(ep, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {'Content-Type': 'text/plain'},
+    body: payload
+  }).catch(function() {});
+
+  // Method 2: sendBeacon (different browser pathway, very reliable for fire-and-forget)
+  if (navigator.sendBeacon) {
+    try {
+      navigator.sendBeacon(ep, new Blob([payload], {type: 'text/plain'}));
+    } catch(e) {}
+  }
+
+  // Method 3: XHR (yet another browser pathway)
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', ep, true);
+    xhr.setRequestHeader('Content-Type', 'text/plain');
+    xhr.send(payload);
+  } catch(e) {}
+}
+
+// Auto-sync: push immediately on every saveData() call
 function syncToCloud() {
   if (!syncReady) return;
   var ep = getSyncUrl();
   if (!ep) return;
   if (!data.tasks || data.tasks.length === 0) return;
-  fetch(ep, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {'Content-Type': 'text/plain'},
-    body: JSON.stringify({ action: 'save', data: JSON.stringify(data) })
-  }).catch(function() {});
+  var payload = JSON.stringify({ action: 'save', data: JSON.stringify(data) });
+  postToGas(ep, payload);
 }
 
 // Manual Push to Cloud: push then verify
@@ -2711,35 +2733,29 @@ function doSync(showFeedback) {
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
   if (showFeedback) toast('Pushing...');
   var taskCount = data.tasks.length;
-  fetch(ep, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {'Content-Type': 'text/plain'},
-    body: JSON.stringify({ action: 'save', data: JSON.stringify(data) })
-  }).then(function() {
-    if (!showFeedback) return;
-    setTimeout(function() {
-      jsonpFetch(ep + '?action=load', function(err2, resp2) {
-        if (err2 || !resp2 || !resp2.ok || !resp2.data) {
-          showSyncWarning(true);
-          toast('Cloud save may have failed');
-          return;
-        }
-        var check;
-        try { check = typeof resp2.data === 'string' ? JSON.parse(resp2.data) : resp2.data; } catch(e) {}
-        if (check && check.tasks) {
-          showSyncWarning(false);
-          toast('Synced ' + taskCount + ' tasks');
-        } else {
-          showSyncWarning(true);
-          toast('Sync may have failed');
-        }
-      });
-    }, 4000);
-  }).catch(function(e) {
-    showSyncWarning(true);
-    if (showFeedback) toast('Sync failed: ' + e.message);
-  });
+  var payload = JSON.stringify({ action: 'save', data: JSON.stringify(data) });
+  postToGas(ep, payload);
+
+  if (!showFeedback) return;
+  // Verify after 3 seconds
+  setTimeout(function() {
+    jsonpFetch(ep + '?action=load', function(err2, resp2) {
+      if (err2 || !resp2 || !resp2.ok || !resp2.data) {
+        showSyncWarning(true);
+        toast('Cloud save may have failed');
+        return;
+      }
+      var check;
+      try { check = typeof resp2.data === 'string' ? JSON.parse(resp2.data) : resp2.data; } catch(e) {}
+      if (check && check.tasks && check.lastModified >= data.lastModified) {
+        showSyncWarning(false);
+        toast('Synced ' + taskCount + ' tasks');
+      } else {
+        showSyncWarning(true);
+        toast('Sync may have failed — try again');
+      }
+    });
+  }, 3000);
 }
 
 function showSyncWarning(show) {
