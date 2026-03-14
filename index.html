@@ -1140,10 +1140,15 @@ function deleteTask(id) {
   const idx = data.tasks.findIndex(t => t.id === id);
   if (idx < 0) return;
   const removed = data.tasks.splice(idx, 1)[0];
+  // Track deletion so cloud sync doesn't resurrect it
+  if (!data.deletedIds) data.deletedIds = [];
+  data.deletedIds.push(id);
   saveData();
   renderTasks();
   renderSuggestions();
   toast('Task deleted', function() {
+    // Undo: remove from deletedIds and restore task
+    data.deletedIds = (data.deletedIds || []).filter(d => d !== id);
     data.tasks.push(removed);
     saveData();
     renderTasks();
@@ -2792,38 +2797,68 @@ function showSyncWarning(show) {
   el.style.display = show ? 'block' : 'none';
 }
 
-function loadFromCloud(showToast) {
+// Pull from cloud, merge with local, push merged result back
+function mergeFromCloud(showToast) {
   var ep = getSyncUrl();
-  if (!ep) { if (showToast) toast('No sync URL set'); return; }
-  if (!showToast && _syncTimer) return;
-  if (showToast) toast('Loading from cloud...');
-  var loadStartedAt = _lastLocalSave;
+  if (!ep) return;
+  if (!syncReady) return;
 
   jsonpFetch(ep + '?action=load', function(err, resp) {
-    if (err) { if (showToast) toast('Cloud fetch failed: ' + err); return; }
-    if (!showToast && _lastLocalSave > loadStartedAt) return;
-    if (!resp || !resp.ok) { if (showToast) toast('Cloud error'); return; }
-    if (!resp.data) { if (showToast) toast('Cloud is empty'); return; }
-    var cloud;
-    try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {
-      if (showToast) toast('Cloud data corrupted');
+    if (err || !resp || !resp.ok || !resp.data) {
+      if (showToast) toast('Cloud fetch failed');
       return;
     }
-    if (!cloud || !cloud.tasks) { if (showToast) toast('Cloud data invalid'); return; }
-    if (!showToast && JSON.stringify(data.tasks) === JSON.stringify(cloud.tasks)) return;
+    var cloud;
+    try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) { return; }
+    if (!cloud || !cloud.tasks) return;
 
-    // Preserve local syncUrl so it doesn't get wiped
-    var localSyncUrl = getSyncUrl();
-    data = cloud;
-    if (!data.settings) data.settings = {};
-    if (localSyncUrl) data.settings.syncUrl = localSyncUrl;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    renderTasks();
-    renderSuggestions();
-    renderTemplateSuggestions();
-    if (currentView === 'insights') renderInsights();
-    if (currentView === 'settings') renderSettings();
-    if (showToast) toast('Restored ' + cloud.tasks.length + ' tasks from cloud');
+    // Combine deletedIds from both sides
+    var localDeleted = new Set(data.deletedIds || []);
+    var cloudDeleted = new Set(cloud.deletedIds || []);
+    if (!data.deletedIds) data.deletedIds = [];
+    for (var did of cloudDeleted) {
+      if (!localDeleted.has(did)) data.deletedIds.push(did);
+    }
+    var allDeleted = new Set(data.deletedIds);
+
+    // Remove locally any tasks the other device deleted
+    var beforeCount = data.tasks.length;
+    data.tasks = data.tasks.filter(function(t) { return !cloudDeleted.has(t.id); });
+
+    // Add cloud tasks we don't have locally (and aren't deleted)
+    var localIds = new Set(data.tasks.map(function(t) { return t.id; }));
+    var merged = 0;
+    for (var i = 0; i < cloud.tasks.length; i++) {
+      var ct = cloud.tasks[i];
+      if (ct.id && !localIds.has(ct.id) && !allDeleted.has(ct.id)) {
+        data.tasks.push(ct);
+        merged++;
+      }
+    }
+
+    // Also merge templates from cloud
+    if (cloud.templates) {
+      var localTemplateIds = new Set((data.templates || []).map(function(t) { return t.id; }));
+      for (var j = 0; j < cloud.templates.length; j++) {
+        if (cloud.templates[j].id && !localTemplateIds.has(cloud.templates[j].id)) {
+          if (!data.templates) data.templates = [];
+          data.templates.push(cloud.templates[j]);
+        }
+      }
+    }
+
+    if (merged > 0 || data.tasks.length !== beforeCount) {
+      data.lastModified = Date.now();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      renderTasks();
+      renderSuggestions();
+      renderTemplateSuggestions();
+      if (showToast) toast('Merged ' + merged + ' new tasks from cloud');
+      // Push merged data back to cloud
+      syncToCloud();
+    } else if (showToast) {
+      toast('Already in sync');
+    }
   });
 }
 
@@ -2852,30 +2887,56 @@ function init() {
     localStorage.removeItem('cadence_sync_url');
   }
 
-  // Rule 4: On open, restore from cloud if localStorage is empty (recovery path)
+  // Rule 4: On open, pull from cloud and merge
   var ep = getSyncUrl();
-  if (ep && (!data.tasks || data.tasks.length === 0)) {
+  if (ep) {
+    var localEmpty = !data.tasks || data.tasks.length === 0;
     jsonpFetch(ep + '?action=load', function(err, resp) {
       if (!err && resp && resp.ok && resp.data) {
         var cloud;
         try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
         if (cloud && cloud.tasks && cloud.tasks.length > 0) {
-          var localSyncUrl = ep;
-          // Preserve local history/freq (not synced to cloud)
-          var localHistory = data.history || [];
-          var localFreq = data.freq || {};
-          data = cloud;
-          data.history = localHistory;
-          data.freq = localFreq;
-          if (!data.settings) data.settings = {};
-          data.settings.syncUrl = localSyncUrl;
-          if (!data.templates) data.templates = [];
-          if (!data.monthly) data.monthly = {items:[], done:{}};
-          if (!data.weekly) data.weekly = {items:[], log:{}};
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-          renderTasks();
-          renderSuggestions();
-          renderTemplateSuggestions();
+          if (localEmpty) {
+            // Full restore — local is empty
+            var localHistory = data.history || [];
+            var localFreq = data.freq || {};
+            data = cloud;
+            data.history = localHistory;
+            data.freq = localFreq;
+            if (!data.templates) data.templates = [];
+            if (!data.monthly) data.monthly = {items:[], done:{}};
+            if (!data.weekly) data.weekly = {items:[], log:{}};
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            renderTasks();
+            renderSuggestions();
+            renderTemplateSuggestions();
+          } else {
+            // Merge — add cloud tasks we don't have, respect deletedIds
+            var localDeleted = new Set(data.deletedIds || []);
+            var cloudDeleted = new Set(cloud.deletedIds || []);
+            if (!data.deletedIds) data.deletedIds = [];
+            for (var did of cloudDeleted) {
+              if (!localDeleted.has(did)) data.deletedIds.push(did);
+            }
+            var allDeleted = new Set(data.deletedIds);
+            data.tasks = data.tasks.filter(function(t) { return !cloudDeleted.has(t.id); });
+            var localIds = new Set(data.tasks.map(function(t) { return t.id; }));
+            var merged = 0;
+            for (var i = 0; i < cloud.tasks.length; i++) {
+              var ct = cloud.tasks[i];
+              if (ct.id && !localIds.has(ct.id) && !allDeleted.has(ct.id)) {
+                data.tasks.push(ct);
+                merged++;
+              }
+            }
+            if (merged > 0) {
+              data.lastModified = Date.now();
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+              renderTasks();
+              renderSuggestions();
+              renderTemplateSuggestions();
+            }
+          }
         }
       }
       syncReady = true;
@@ -2889,8 +2950,12 @@ function init() {
     navigator.serviceWorker.register('./service-worker.js', {updateViaCache: 'none'});
   }
 
-  // Auto-pull disabled until saves are confirmed working
-  // Re-enable once POST text/plain reliably reaches GAS from all devices
+  // Rule 2: Auto-merge when switching back to the app
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible' && syncReady) {
+      mergeFromCloud(false);
+    }
+  });
 
   // Auto-refresh theme every minute
   setInterval(function() {
