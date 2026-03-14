@@ -848,9 +848,15 @@ function loadData() {
   }
 }
 
+let _syncTimer = null;
+let _lastLocalSave = 0;
+let syncReady = false;
+
 function saveData() {
   data.lastModified = Date.now();
+  _lastLocalSave = Date.now();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  syncToCloud();
 }
 
 // ===== THEME =====
@@ -2548,9 +2554,9 @@ function renderSettings() {
         <div style="flex:1">
           <div class="setting-label">Apps Script URL</div>
           <div class="setting-desc">Paste your deployed web app URL for cloud backup</div>
-          <input class="form-input" id="settingSyncUrl" value="${esc(localStorage.getItem('cadence_sync_url')||'')}"
+          <input class="form-input" id="settingSyncUrl" value="${esc((data.settings&&data.settings.syncUrl)||'')}"
                  placeholder="https://script.google.com/macros/s/.../exec" style="margin-top:6px;font-size:.75rem"
-                 onchange="localStorage.setItem('cadence_sync_url',this.value.trim());toast('Sync URL saved — reload app to activate')">
+                 onchange="data.settings.syncUrl=this.value.trim();saveData();toast('Sync URL saved')">
         </div>
       </div>
       <div class="setting-row">
@@ -2559,7 +2565,7 @@ function renderSettings() {
           <div class="setting-desc">Push current data to cloud</div>
         </div>
         <button class="form-btn form-btn-outline" style="width:auto;padding:6px 14px;font-size:.8rem"
-                onclick="pushToCloud()">Push to Cloud</button>
+                onclick="doSync(true)">Push to Cloud</button>
       </div>
       <div class="setting-row">
         <div>
@@ -2653,14 +2659,14 @@ function clearHistory() {
   if (!confirm('Clear all task history? This will reset your smart suggestions.')) return;
   data.history = [];
   data.freq = {};
-  _origSaveData(); // save locally only — don't sync cleared history to cloud
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); // save locally only — don't sync cleared history to cloud
   renderInsights();
   toast('History cleared');
 }
 
 // ===== CLOUD SYNC =====
 function getSyncUrl() {
-  return localStorage.getItem('cadence_sync_url') || '';
+  return (data && data.settings && data.settings.syncUrl) || '';
 }
 
 // JSONP helper — bypasses CORS by loading script tag (same as proven load mechanism)
@@ -2685,113 +2691,138 @@ function jsonpFetch(url, callback) {
   document.head.appendChild(script);
 }
 
-let syncReady = false;
-
-// Rule 1 + 3: Every change saves to Sheets IMMEDIATELY — no debounce
 function syncToCloud() {
   if (!syncReady) return;
   var ep = getSyncUrl();
   if (!ep) return;
   if (!data.tasks || data.tasks.length === 0) return;
-  // Rule 2: POST with text/plain — body reaches GAS doPost via e.postData.contents
-  fetch(ep, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ action: 'save', data: JSON.stringify(data) })
-  }).catch(function() {});
+  clearTimeout(_syncTimer);
+  doSync(false);
 }
 
-// Manual push — saves then verifies via JSONP load
-function pushToCloud() {
+function doSync(showFeedback) {
+  _syncTimer = null;
   var ep = getSyncUrl();
-  if (!ep) { toast('No sync URL set'); return; }
-  toast('Pushing to cloud...');
-  fetch(ep, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ action: 'save', data: JSON.stringify(data) })
-  }).then(function() {
-    // Verify via JSONP
-    setTimeout(function() {
-      jsonpFetch(ep + '?action=load', function(err, resp) {
-        if (err) { toast('Push failed: ' + err, null, 5000); return; }
-        var cloud;
-        try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
-        if (cloud && cloud.tasks && cloud.tasks.length === data.tasks.length) {
-          toast('Pushed ' + data.tasks.length + ' tasks', null, 3000);
-        } else {
-          toast('Push verify failed — cloud has ' + (cloud && cloud.tasks ? cloud.tasks.length : 0) + ', local has ' + data.tasks.length, null, 5000);
+  if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
+  if (showFeedback) toast('Syncing...');
+
+  // Step 1: Pull latest from sheet first
+  jsonpFetch(ep + '?action=load', function(err, resp) {
+    var cloud = null;
+    if (!err && resp && resp.ok && resp.data) {
+      try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
+    }
+
+    // Step 2: Merge — add any cloud tasks we don't have locally
+    if (cloud && cloud.tasks && cloud.tasks.length > 0) {
+      var localIds = {};
+      data.tasks.forEach(function(t) { localIds[t.id] = true; });
+      var merged = 0;
+      for (var i = 0; i < cloud.tasks.length; i++) {
+        var ct = cloud.tasks[i];
+        if (ct.id && !localIds[ct.id]) {
+          data.tasks.push(ct);
+          merged++;
         }
-      });
-    }, 2000);
-  }).catch(function(err) {
-    toast('Push failed: ' + (err.message || 'unknown'), null, 5000);
+      }
+      // Merge templates, settings (keep local syncUrl)
+      if (cloud.templates && cloud.templates.length > 0) {
+        var localTmplIds = {};
+        (data.templates || []).forEach(function(t) { localTmplIds[t.id] = true; });
+        for (var j = 0; j < cloud.templates.length; j++) {
+          if (cloud.templates[j].id && !localTmplIds[cloud.templates[j].id]) {
+            data.templates.push(cloud.templates[j]);
+          }
+        }
+      }
+      if (merged > 0) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        renderTasks();
+        renderSuggestions();
+      }
+    }
+
+    // Step 3: Push merged data to sheet
+    var payload = JSON.stringify(data);
+    var taskCount = data.tasks.length;
+    fetch(ep, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({ action: 'save', data: payload })
+    }).then(function() {
+      // Verify save worked
+      setTimeout(function() {
+        jsonpFetch(ep + '?action=load', function(err2, resp2) {
+          if (err2 || !resp2 || !resp2.ok || !resp2.data) {
+            showSyncWarning(true);
+            if (showFeedback) toast('Cloud save may have failed');
+            return;
+          }
+          var check;
+          try { check = typeof resp2.data === 'string' ? JSON.parse(resp2.data) : resp2.data; } catch(e) {}
+          if (check && check.tasks && check.tasks.length >= taskCount) {
+            showSyncWarning(false);
+            if (showFeedback) toast('Synced ' + taskCount + ' tasks');
+          } else {
+            showSyncWarning(true);
+            if (showFeedback) toast('Sync may have failed');
+          }
+        });
+      }, 2500);
+    }).catch(function(e) {
+      showSyncWarning(true);
+      if (showFeedback) toast('Sync failed: ' + e.message);
+    });
   });
 }
 
-// Rule 4: On open + on resume, pull from Sheets (source of truth)
-function loadFromCloud(showToast, onComplete) {
-  var ep = getSyncUrl();
-  if (!ep) {
-    if (showToast) toast('No sync URL set');
-    if (onComplete) onComplete();
-    return;
+function showSyncWarning(show) {
+  var el = document.getElementById('syncWarning');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'syncWarning';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px 12px;font-size:.78rem;text-align:center;z-index:9999;display:none;font-weight:600';
+    el.innerHTML = 'Cloud sync failed — your data is saved locally but NOT in the cloud. Try Push to Cloud from Settings.';
+    document.body.prepend(el);
   }
+  el.style.display = show ? 'block' : 'none';
+}
+
+function loadFromCloud(showToast) {
+  var ep = getSyncUrl();
+  if (!ep) { if (showToast) toast('No sync URL set'); return; }
+  if (!showToast && _syncTimer) return;
   if (showToast) toast('Loading from cloud...');
+  var loadStartedAt = _lastLocalSave;
+
   jsonpFetch(ep + '?action=load', function(err, resp) {
-    if (err) {
-      if (showToast) toast('Cloud fetch failed: ' + err);
-      if (onComplete) onComplete();
-      return;
-    }
-    if (!resp || !resp.ok) {
-      if (showToast) toast('Cloud error: ' + ((resp && resp.error) || 'unknown'));
-      if (onComplete) onComplete();
-      return;
-    }
-    if (!resp.data) {
-      if (showToast) toast('Cloud is empty — nothing to restore');
-      if (onComplete) onComplete();
-      return;
-    }
+    if (err) { if (showToast) toast('Cloud fetch failed: ' + err); return; }
+    if (!showToast && _lastLocalSave > loadStartedAt) return;
+    if (!resp || !resp.ok) { if (showToast) toast('Cloud error'); return; }
+    if (!resp.data) { if (showToast) toast('Cloud is empty'); return; }
     var cloud;
     try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {
       if (showToast) toast('Cloud data corrupted');
-      if (onComplete) onComplete();
       return;
     }
-    if (!cloud || !cloud.tasks) {
-      if (showToast) toast('Cloud data invalid');
-      if (onComplete) onComplete();
-      return;
-    }
-    // Skip if tasks already match (prevents unnecessary re-renders)
-    if (!showToast && JSON.stringify(data.tasks) === JSON.stringify(cloud.tasks)) {
-      if (onComplete) onComplete();
-      return;
-    }
-    // Apply cloud data
+    if (!cloud || !cloud.tasks) { if (showToast) toast('Cloud data invalid'); return; }
+    if (!showToast && JSON.stringify(data.tasks) === JSON.stringify(cloud.tasks)) return;
+
+    // Preserve local syncUrl so it doesn't get wiped
+    var localSyncUrl = getSyncUrl();
     data = cloud;
-    _origSaveData(); // save to localStorage only — don't re-sync to cloud
+    if (!data.settings) data.settings = {};
+    if (localSyncUrl) data.settings.syncUrl = localSyncUrl;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     renderTasks();
     renderSuggestions();
     renderTemplateSuggestions();
     if (currentView === 'insights') renderInsights();
     if (currentView === 'settings') renderSettings();
     if (showToast) toast('Restored ' + cloud.tasks.length + ' tasks from cloud');
-    if (onComplete) onComplete();
   });
 }
-
-// Auto-sync after every save — IMMEDIATE, no debounce
-const _origSaveData = saveData;
-saveData = function() {
-  data.lastModified = Date.now();
-  _origSaveData();
-  syncToCloud();
-};
 
 // ===== INITIALIZATION =====
 function init() {
@@ -2809,11 +2840,21 @@ function init() {
   renderTemplateSuggestions();
   checkMonthlyAutoLoad();
 
+  // Migrate sync URL from old localStorage key to data.settings.syncUrl
+  var oldUrl = localStorage.getItem('cadence_sync_url');
+  if (oldUrl && !getSyncUrl()) {
+    if (!data.settings) data.settings = {};
+    data.settings.syncUrl = oldUrl;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.removeItem('cadence_sync_url');
+  }
+
   // Rule 4: On open, pull from Sheets (source of truth)
   // syncReady stays false until load completes — prevents empty data racing to cloud
   setTimeout(function() {
     var ep = getSyncUrl();
     if (!ep) { syncReady = true; return; }
+    var localSyncUrl = ep;
     jsonpFetch(ep + '?action=load', function(err, resp) {
       if (!err && resp && resp.ok && resp.data) {
         var cloud;
@@ -2822,6 +2863,8 @@ function init() {
           var localEmpty = !data.tasks || data.tasks.length === 0;
           if (localEmpty || (cloud.lastModified && cloud.lastModified > (data.lastModified || 0))) {
             data = cloud;
+            if (!data.settings) data.settings = {};
+            data.settings.syncUrl = localSyncUrl;
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
             renderTasks();
             renderSuggestions();
