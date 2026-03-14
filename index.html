@@ -2853,7 +2853,7 @@ function mergeFromCloud(showToast) {
       renderTasks();
       renderSuggestions();
       renderTemplateSuggestions();
-      if (showToast) toast('Merged ' + merged + ' new tasks from cloud');
+      toast('Synced +' + merged + ' tasks from cloud');
       // Push merged data back to cloud
       syncToCloud();
     } else if (showToast) {
@@ -2892,51 +2892,69 @@ function init() {
   if (ep) {
     var localEmpty = !data.tasks || data.tasks.length === 0;
     jsonpFetch(ep + '?action=load', function(err, resp) {
-      if (!err && resp && resp.ok && resp.data) {
-        var cloud;
-        try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
-        if (cloud && cloud.tasks && cloud.tasks.length > 0) {
-          if (localEmpty) {
-            // Full restore — local is empty
-            var localHistory = data.history || [];
-            var localFreq = data.freq || {};
-            data = cloud;
-            data.history = localHistory;
-            data.freq = localFreq;
-            if (!data.templates) data.templates = [];
-            if (!data.monthly) data.monthly = {items:[], done:{}};
-            if (!data.weekly) data.weekly = {items:[], log:{}};
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-            renderTasks();
-            renderSuggestions();
-            renderTemplateSuggestions();
-          } else {
-            // Merge — add cloud tasks we don't have, respect deletedIds
-            var localDeleted = new Set(data.deletedIds || []);
-            var cloudDeleted = new Set(cloud.deletedIds || []);
-            if (!data.deletedIds) data.deletedIds = [];
-            for (var did of cloudDeleted) {
-              if (!localDeleted.has(did)) data.deletedIds.push(did);
-            }
-            var allDeleted = new Set(data.deletedIds);
-            data.tasks = data.tasks.filter(function(t) { return !cloudDeleted.has(t.id); });
-            var localIds = new Set(data.tasks.map(function(t) { return t.id; }));
-            var merged = 0;
-            for (var i = 0; i < cloud.tasks.length; i++) {
-              var ct = cloud.tasks[i];
-              if (ct.id && !localIds.has(ct.id) && !allDeleted.has(ct.id)) {
-                data.tasks.push(ct);
-                merged++;
-              }
-            }
-            if (merged > 0) {
-              data.lastModified = Date.now();
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-              renderTasks();
-              renderSuggestions();
-              renderTemplateSuggestions();
-            }
+      if (err || !resp || !resp.ok) {
+        toast('Cloud load failed: ' + (err || 'bad response'));
+        syncReady = true;
+        return;
+      }
+      if (!resp.data) {
+        toast('Cloud is empty');
+        syncReady = true;
+        return;
+      }
+      var cloud;
+      try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {
+        toast('Cloud data corrupt');
+        syncReady = true;
+        return;
+      }
+      if (!cloud || !cloud.tasks || cloud.tasks.length === 0) {
+        syncReady = true;
+        return;
+      }
+      if (localEmpty) {
+        // Full restore — local is empty
+        var localHistory = data.history || [];
+        var localFreq = data.freq || {};
+        data = cloud;
+        data.history = localHistory;
+        data.freq = localFreq;
+        if (!data.templates) data.templates = [];
+        if (!data.monthly) data.monthly = {items:[], done:{}};
+        if (!data.weekly) data.weekly = {items:[], log:{}};
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        renderTasks();
+        renderSuggestions();
+        renderTemplateSuggestions();
+        toast('Restored ' + cloud.tasks.length + ' tasks from cloud');
+      } else {
+        // Merge — add cloud tasks we don't have, respect deletedIds
+        var localDeleted = new Set(data.deletedIds || []);
+        var cloudDeleted = new Set(cloud.deletedIds || []);
+        if (!data.deletedIds) data.deletedIds = [];
+        for (var did of cloudDeleted) {
+          if (!localDeleted.has(did)) data.deletedIds.push(did);
+        }
+        var allDeleted = new Set(data.deletedIds);
+        data.tasks = data.tasks.filter(function(t) { return !cloudDeleted.has(t.id); });
+        var localIds = new Set(data.tasks.map(function(t) { return t.id; }));
+        var merged = 0;
+        for (var i = 0; i < cloud.tasks.length; i++) {
+          var ct = cloud.tasks[i];
+          if (ct.id && !localIds.has(ct.id) && !allDeleted.has(ct.id)) {
+            data.tasks.push(ct);
+            merged++;
           }
+        }
+        if (merged > 0) {
+          data.lastModified = Date.now();
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          renderTasks();
+          renderSuggestions();
+          renderTemplateSuggestions();
+          toast('Merged +' + merged + ' from cloud');
+        } else {
+          toast('In sync (' + data.tasks.length + ' tasks)');
         }
       }
       syncReady = true;
