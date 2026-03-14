@@ -2788,10 +2788,20 @@ function syncToCloud() {
           }
           var allDeleted = new Set(data.deletedIds);
           data.tasks = data.tasks.filter(function(t) { return !cloudDeleted.has(t.id); });
-          var localIds = new Set(data.tasks.map(function(t) { return t.id; }));
+          var localMap = {};
+          data.tasks.forEach(function(t) { if (t.id) localMap[t.id] = t; });
           for (var i = 0; i < cloud.tasks.length; i++) {
             var ct = cloud.tasks[i];
-            if (ct.id && !localIds.has(ct.id) && !allDeleted.has(ct.id)) {
+            if (!ct.id || allDeleted.has(ct.id)) continue;
+            if (localMap[ct.id]) {
+              // Update local with cloud version if cloud is newer
+              var localJ = JSON.stringify(localMap[ct.id]);
+              var cloudJ = JSON.stringify(ct);
+              if (localJ !== cloudJ) {
+                var idx = data.tasks.indexOf(localMap[ct.id]);
+                if (idx >= 0) data.tasks[idx] = ct;
+              }
+            } else {
               data.tasks.push(ct);
             }
           }
@@ -2853,12 +2863,21 @@ function mergeFromCloud(showToast) {
     var beforeCount = data.tasks.length;
     data.tasks = data.tasks.filter(function(t) { return !cloudDeleted.has(t.id); });
 
-    // Add cloud tasks we don't have locally (and aren't deleted)
-    var localIds = new Set(data.tasks.map(function(t) { return t.id; }));
+    // Merge cloud tasks: add new ones, update changed ones
+    var localMap = {};
+    data.tasks.forEach(function(t) { if (t.id) localMap[t.id] = t; });
     var merged = 0;
+    var updated = 0;
     for (var i = 0; i < cloud.tasks.length; i++) {
       var ct = cloud.tasks[i];
-      if (ct.id && !localIds.has(ct.id) && !allDeleted.has(ct.id)) {
+      if (!ct.id || allDeleted.has(ct.id)) continue;
+      if (localMap[ct.id]) {
+        // Update local with cloud version if different
+        if (JSON.stringify(localMap[ct.id]) !== JSON.stringify(ct)) {
+          var idx = data.tasks.indexOf(localMap[ct.id]);
+          if (idx >= 0) { data.tasks[idx] = ct; updated++; }
+        }
+      } else {
         data.tasks.push(ct);
         merged++;
       }
@@ -2875,14 +2894,17 @@ function mergeFromCloud(showToast) {
       }
     }
 
-    if (merged > 0 || data.tasks.length !== beforeCount) {
+    if (merged > 0 || updated > 0 || data.tasks.length !== beforeCount) {
       data.tasks.sort(function(a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
       data.lastModified = Date.now();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       renderTasks();
       renderSuggestions();
       renderTemplateSuggestions();
-      toast('Synced +' + merged + ' tasks from cloud');
+      var msg = '';
+      if (merged > 0) msg += '+' + merged + ' new';
+      if (updated > 0) msg += (msg ? ', ' : '') + updated + ' updated';
+      toast('Synced: ' + msg);
       // Push merged data back to cloud
       syncToCloud();
     } else if (showToast) {
@@ -2966,23 +2988,34 @@ function init() {
         }
         var allDeleted = new Set(data.deletedIds);
         data.tasks = data.tasks.filter(function(t) { return !cloudDeleted.has(t.id); });
-        var localIds = new Set(data.tasks.map(function(t) { return t.id; }));
+        var localMap = {};
+        data.tasks.forEach(function(t) { if (t.id) localMap[t.id] = t; });
         var merged = 0;
+        var updated = 0;
         for (var i = 0; i < cloud.tasks.length; i++) {
           var ct = cloud.tasks[i];
-          if (ct.id && !localIds.has(ct.id) && !allDeleted.has(ct.id)) {
+          if (!ct.id || allDeleted.has(ct.id)) continue;
+          if (localMap[ct.id]) {
+            if (JSON.stringify(localMap[ct.id]) !== JSON.stringify(ct)) {
+              var idx = data.tasks.indexOf(localMap[ct.id]);
+              if (idx >= 0) { data.tasks[idx] = ct; updated++; }
+            }
+          } else {
             data.tasks.push(ct);
             merged++;
           }
         }
-        if (merged > 0) {
+        if (merged > 0 || updated > 0) {
           data.tasks.sort(function(a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
           data.lastModified = Date.now();
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
           renderTasks();
           renderSuggestions();
           renderTemplateSuggestions();
-          toast('Merged +' + merged + ' from cloud');
+          var msg = '';
+          if (merged > 0) msg += '+' + merged + ' new';
+          if (updated > 0) msg += (msg ? ', ' : '') + updated + ' updated';
+          toast('Synced: ' + msg);
         } else {
           toast('In sync (' + data.tasks.length + ' tasks)');
         }
