@@ -2700,8 +2700,8 @@ function syncToCloud() {
   _syncTimer = setTimeout(_doSync, 2000);
 }
 
-// Save via fetch POST with mode:'no-cors' — GAS processes POST body before 302 redirect
-// Response is opaque but data reaches doPost(e) reliably on all devices
+// Save via JSONP GET — same proven mechanism as loads, with real confirmation
+// Falls back to POST for payloads too large for URL (>7000 chars encoded)
 function _doSync(showFeedback) {
   _syncTimer = null;
   if (_syncing) { _pendingResync = true; return; }
@@ -2709,44 +2709,54 @@ function _doSync(showFeedback) {
   if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
   if (!showFeedback && (!data.tasks || data.tasks.length === 0)) return;
   var payload = JSON.stringify(data);
+  var encoded = encodeURIComponent(payload);
   _syncing = true;
 
   function syncDone(ok, msg) {
     _syncing = false;
     if (ok && showFeedback) toast('Pushed ' + data.tasks.length + ' tasks', null, 3000);
-    else if (ok) toast('Cloud saved', null, 2500);
-    else toast('Sync failed: ' + (msg || 'unknown'), null, 5000);
+    else if (ok && !showFeedback) { /* silent success */ }
+    else if (!ok) toast('Sync failed: ' + (msg || 'unknown'), null, 5000);
     if (_pendingResync) {
       _pendingResync = false;
       setTimeout(function() { _doSync(false); }, 1000);
     }
   }
 
-  fetch(ep, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'data=' + encodeURIComponent(payload)
-  }).then(function() {
-    // Response is opaque with no-cors, but POST body reached GAS
-    if (showFeedback) {
-      // Verify with JSONP load for manual Push
-      setTimeout(function() {
-        jsonpFetch(ep + '?action=load', function(err, resp) {
-          if (err) { syncDone(false, 'verify failed: ' + err); return; }
-          if (!resp || !resp.ok) { syncDone(false, 'verify error'); return; }
-          var cloud;
-          try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) {}
-          var ok = cloud && cloud.tasks && cloud.tasks.length === data.tasks.length;
-          syncDone(ok, ok ? null : 'data mismatch (cloud: ' + (cloud && cloud.tasks ? cloud.tasks.length : 0) + ', local: ' + data.tasks.length + ')');
-        });
-      }, 2000);
-    } else {
-      syncDone(true);
-    }
-  }).catch(function(err) {
-    syncDone(false, err.message || 'fetch failed');
-  });
+  if (encoded.length < 7000) {
+    // JSONP save — GET with callback, real confirmation
+    var saveUrl = ep + '?action=save&data=' + encoded;
+    jsonpFetch(saveUrl, function(err, resp) {
+      if (err) { syncDone(false, 'save failed: ' + err); return; }
+      if (resp && resp.ok) { syncDone(true); }
+      else { syncDone(false, (resp && resp.error) || 'save error'); }
+    });
+  } else {
+    // Payload too large for URL — use POST fallback
+    fetch(ep, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encoded
+    }).then(function() {
+      if (showFeedback) {
+        // Verify POST landed via JSONP load
+        setTimeout(function() {
+          jsonpFetch(ep + '?action=load', function(err, resp) {
+            if (err) { syncDone(false, 'verify failed: ' + err); return; }
+            var cloud;
+            try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e2) {}
+            var ok = cloud && cloud.tasks && cloud.tasks.length === data.tasks.length;
+            syncDone(ok, ok ? null : 'POST verify mismatch');
+          });
+        }, 2000);
+      } else {
+        syncDone(true);
+      }
+    }).catch(function(err) {
+      syncDone(false, err.message || 'POST failed');
+    });
+  }
 }
 
 function loadFromCloud(showToast, onComplete) {
@@ -2852,6 +2862,13 @@ function init() {
       loadFromCloud(false);
     }
   });
+
+  // Poll cloud every 30s so changes from other devices appear without switching tabs
+  setInterval(function() {
+    if (syncReady && !document.hidden) {
+      loadFromCloud(false);
+    }
+  }, 30000);
 
   // Auto-refresh theme every minute
   setInterval(function() {
