@@ -828,7 +828,6 @@ function loadData() {
     if (!data.monthly) data.monthly = {items:[], done:{}};
     if (!data.weekly) data.weekly = {items:[], log:{}};
     if (!data.settings) data.settings = {};
-    data.tasks.sort(function(a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
   } catch(e) {
     data = {
       tasks: [],
@@ -2795,7 +2794,7 @@ function syncToCloud() {
             if (!ct.id || allDeleted.has(ct.id) || localIds.has(ct.id)) continue;
             data.tasks.push(ct);
           }
-          data.tasks.sort(function(a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
+          // preserve user's manual order — new tasks append at end
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         }
       }
@@ -2885,7 +2884,6 @@ function mergeFromCloud(showToast) {
     }
 
     if (merged > 0 || updated > 0 || data.tasks.length !== beforeCount) {
-      data.tasks.sort(function(a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
       data.lastModified = Date.now();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       renderTasks();
@@ -2996,7 +2994,7 @@ function init() {
           }
         }
         if (merged > 0 || updated > 0) {
-          data.tasks.sort(function(a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
+          // preserve user's manual order — new tasks append at end
           data.lastModified = Date.now();
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
           renderTasks();
