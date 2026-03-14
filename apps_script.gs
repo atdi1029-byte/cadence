@@ -37,7 +37,20 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    var dataStr = e.parameter.data || (e.postData ? e.postData.contents : '');
+    var body = e.postData ? e.postData.contents : '';
+    var dataStr = '';
+    // Handle text/plain JSON body: { action: 'save', data: '...' }
+    try {
+      var parsed = JSON.parse(body);
+      if (parsed.action === 'save' && parsed.data) {
+        dataStr = parsed.data;
+      } else {
+        dataStr = body;
+      }
+    } catch(pe) {
+      // Fallback: raw body or form-encoded
+      dataStr = e.parameter && e.parameter.data ? e.parameter.data : body;
+    }
     return handleSave(dataStr);
   } catch (err) {
     return jsonOut({ok: false, error: err.message});
