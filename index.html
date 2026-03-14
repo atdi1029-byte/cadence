@@ -2765,7 +2765,7 @@ function _doCloudSave(ep, showFeedback) {
   }
 }
 
-// Auto-sync: debounce 1.5s then save via JSONP chunks
+// Auto-sync: debounce 1.5s then pull-merge-push
 function syncToCloud() {
   if (!syncReady) return;
   var ep = getSyncUrl();
@@ -2773,7 +2773,33 @@ function syncToCloud() {
   if (!data.tasks || data.tasks.length === 0) return;
   clearTimeout(_syncDebounce);
   _syncDebounce = setTimeout(function() {
-    _doCloudSave(ep, false);
+    // Pull cloud first, merge, then push merged result
+    jsonpFetch(ep + '?action=load', function(err, resp) {
+      if (!err && resp && resp.ok && resp.data) {
+        var cloud;
+        try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) { cloud = null; }
+        if (cloud && cloud.tasks) {
+          var localDeleted = new Set(data.deletedIds || []);
+          var cloudDeleted = new Set(cloud.deletedIds || []);
+          if (!data.deletedIds) data.deletedIds = [];
+          for (var did of cloudDeleted) {
+            if (!localDeleted.has(did)) data.deletedIds.push(did);
+          }
+          var allDeleted = new Set(data.deletedIds);
+          data.tasks = data.tasks.filter(function(t) { return !cloudDeleted.has(t.id); });
+          var localIds = new Set(data.tasks.map(function(t) { return t.id; }));
+          for (var i = 0; i < cloud.tasks.length; i++) {
+            var ct = cloud.tasks[i];
+            if (ct.id && !localIds.has(ct.id) && !allDeleted.has(ct.id)) {
+              data.tasks.push(ct);
+            }
+          }
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        }
+      }
+      // Push merged data to cloud
+      _doCloudSave(ep, false);
+    });
   }, 1500);
 }
 
