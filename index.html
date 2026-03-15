@@ -2859,12 +2859,13 @@ function mergeFromCloud(showToast) {
     data.tasks.forEach(function(t) { if (t.id) localMap[t.id] = t; });
     var merged = 0;
     var updated = 0;
+    var cloudIsNewer = (cloud.lastModified || 0) > (data.lastModified || 0);
     for (var i = 0; i < cloud.tasks.length; i++) {
       var ct = cloud.tasks[i];
       if (!ct.id || allDeleted.has(ct.id)) continue;
       if (localMap[ct.id]) {
-        // Update local with cloud version if different
-        if (JSON.stringify(localMap[ct.id]) !== JSON.stringify(ct)) {
+        // Only overwrite local with cloud version if cloud is actually newer
+        if (cloudIsNewer && JSON.stringify(localMap[ct.id]) !== JSON.stringify(ct)) {
           var idx = data.tasks.indexOf(localMap[ct.id]);
           if (idx >= 0) { data.tasks[idx] = ct; updated++; }
         }
