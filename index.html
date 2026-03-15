@@ -347,6 +347,17 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
   width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;
   font-size:1.1rem;font-weight:700;display:flex;align-items:center;justify-content:center;
 }
+.monthly-subitem{
+  display:flex;align-items:center;gap:8px;padding:5px 0 5px 28px;
+  border-bottom:1px solid rgba(255,255,255,0.03);
+}
+.monthly-subitem:last-child{border-bottom:none}
+.monthly-subitem .monthly-check{width:15px;height:15px;font-size:.6rem;border-radius:4px}
+.monthly-subitem .monthly-item-text{font-size:.78rem;color:var(--text-dim)}
+.monthly-subitem.m-done .monthly-item-text{text-decoration:line-through;opacity:.4}
+.monthly-subitem.m-done .monthly-check{border-color:var(--green);color:var(--green);background:var(--green-bg)}
+.monthly-add-sub{color:var(--text-dim);font-size:.75rem;cursor:pointer;padding:2px 6px;opacity:.4;transition:opacity .2s}
+.monthly-add-sub:active{opacity:1;color:var(--accent)}
 
 /* ===== TASK LIST ===== */
 .task-section-label{
@@ -2282,11 +2293,61 @@ function toggleMonthlyItem(itemId) {
   const idx = arr.indexOf(itemId);
   if (idx >= 0) arr.splice(idx, 1);
   else arr.push(itemId);
+  // If parent with subtasks, toggle all subtasks too
+  const item = (data.monthly.items || []).find(i => i.id === itemId);
+  if (item && item.subtasks && item.subtasks.length > 0) {
+    const nowDone = arr.includes(itemId);
+    item.subtasks.forEach(s => {
+      const si = arr.indexOf(s.id);
+      if (nowDone && si < 0) arr.push(s.id);
+      else if (!nowDone && si >= 0) arr.splice(si, 1);
+    });
+  }
   // Clean old months (keep last 3)
   const keys = Object.keys(data.monthly.done).sort();
   while (keys.length > 3) { delete data.monthly.done[keys.shift()]; }
   saveData();
   renderMonthly();
+}
+
+function toggleMonthlySubitem(parentId, subId) {
+  const mk = getMonthKey();
+  if (!data.monthly.done[mk]) data.monthly.done[mk] = [];
+  const arr = data.monthly.done[mk];
+  const idx = arr.indexOf(subId);
+  if (idx >= 0) arr.splice(idx, 1);
+  else arr.push(subId);
+  // Auto-complete parent if all subtasks done
+  const item = (data.monthly.items || []).find(i => i.id === parentId);
+  if (item && item.subtasks) {
+    const allDone = item.subtasks.every(s => arr.includes(s.id));
+    const pi = arr.indexOf(parentId);
+    if (allDone && pi < 0) arr.push(parentId);
+    else if (!allDone && pi >= 0) arr.splice(pi, 1);
+  }
+  saveData();
+  renderMonthly();
+}
+
+function addMonthlySubitem(parentId) {
+  const text = prompt('New subtask:');
+  if (!text || !text.trim()) return;
+  const item = (data.monthly.items || []).find(i => i.id === parentId);
+  if (!item) return;
+  if (!item.subtasks) item.subtasks = [];
+  item.subtasks.push({id: 'ms' + Date.now(), text: text.trim()});
+  saveData();
+  renderMonthly();
+  toast('Subtask added');
+}
+
+function deleteMonthlySubitem(parentId, subId) {
+  const item = (data.monthly.items || []).find(i => i.id === parentId);
+  if (!item || !item.subtasks) return;
+  item.subtasks = item.subtasks.filter(s => s.id !== subId);
+  saveData();
+  renderMonthly();
+  toast('Subtask removed');
 }
 
 function addMonthlyItem() {
@@ -2323,10 +2384,19 @@ function renderMonthly() {
 
   document.getElementById('monthlyMonth').textContent = getMonthLabel();
 
-  // Progress
-  const doneCount = items.filter(i => isMonthlyDone(i.id)).length;
+  // Progress (count subtasks individually for items that have them)
+  let totalCount = 0, doneCount = 0;
+  items.forEach(i => {
+    if (i.subtasks && i.subtasks.length > 0) {
+      totalCount += i.subtasks.length;
+      doneCount += i.subtasks.filter(s => isMonthlyDone(s.id)).length;
+    } else {
+      totalCount++;
+      if (isMonthlyDone(i.id)) doneCount++;
+    }
+  });
   const progEl = document.getElementById('monthlyProgress');
-  progEl.textContent = items.length ? doneCount + '/' + items.length : '';
+  progEl.textContent = totalCount ? doneCount + '/' + totalCount : '';
 
   // Collapse state
   const collapsed = localStorage.getItem('cadence_monthly_collapsed') === '1';
@@ -2350,11 +2420,23 @@ function renderMonthly() {
   }
   el.innerHTML = items.map(i => {
     const done = isMonthlyDone(i.id);
-    return `<div class="monthly-item${done ? ' m-done' : ''}">
+    let html = `<div class="monthly-item${done ? ' m-done' : ''}">
       <div class="monthly-check" onclick="toggleMonthlyItem('${i.id}')">${done ? '\u2713' : ''}</div>
       <div class="monthly-item-text">${esc(titleCase(i.text))}</div>
+      <div class="monthly-add-sub" onclick="addMonthlySubitem('${i.id}')">+</div>
       <div class="monthly-item-del" onclick="deleteMonthlyItem('${i.id}')">\u00D7</div>
     </div>`;
+    if (i.subtasks && i.subtasks.length > 0) {
+      html += i.subtasks.map(s => {
+        const sd = isMonthlyDone(s.id);
+        return `<div class="monthly-subitem${sd ? ' m-done' : ''}">
+          <div class="monthly-check" onclick="toggleMonthlySubitem('${i.id}','${s.id}')">${sd ? '\u2713' : ''}</div>
+          <div class="monthly-item-text">${esc(titleCase(s.text))}</div>
+          <div class="monthly-item-del" onclick="deleteMonthlySubitem('${i.id}','${s.id}')">\u00D7</div>
+        </div>`;
+      }).join('');
+    }
+    return html;
   }).join('');
 }
 
