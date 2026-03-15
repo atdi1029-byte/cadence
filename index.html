@@ -2143,7 +2143,10 @@ function renderWeekly() {
   document.getElementById('weeklyWeek').textContent = getWeekLabel();
 
   // Progress
-  const metCount = items.filter(function(i) { return getWeeklyVal(i.id) >= i.target; }).length;
+  const metCount = items.filter(function(i) {
+    var t = i.unit === 'hrs' ? i.target * 60 : i.target;
+    return getWeeklyVal(i.id) >= t;
+  }).length;
   const progEl = document.getElementById('weeklyProgress');
   progEl.textContent = items.length ? metCount + '/' + items.length : '';
 
@@ -2195,9 +2198,15 @@ function logWeeklyProgress(itemId) {
     const current = data.weekly.log[wk][itemId] || 0;
     var ch = Math.floor(current / 60), cm = Math.round(current % 60);
     var currentLabel = (ch ? ch + 'h ' : '') + cm + 'm';
-    const input = prompt('Log minutes for ' + item.text + ' (current: ' + currentLabel + ' / ' + item.target + 'h)', '30');
+    const input = prompt('Add minutes for ' + item.text + '\n(current: ' + currentLabel + ' / ' + item.target + 'h)\n\nEnter minutes, e.g. 30 or 1.5h:', '30');
     if (input === null) return;
-    const val = parseInt(input);
+    var val;
+    var trimmed = input.trim().toLowerCase();
+    if (trimmed.endsWith('h')) {
+      val = Math.round(parseFloat(trimmed) * 60);
+    } else {
+      val = Math.round(parseFloat(trimmed));
+    }
     if (isNaN(val) || val <= 0) return;
     data.weekly.log[wk][itemId] = current + val;
   } else {
