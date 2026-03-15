@@ -2897,7 +2897,14 @@ function syncToCloud() {
             if (cloud.weekly.log) {
               if (!data.weekly.log) data.weekly.log = {};
               for (var cwk in cloud.weekly.log) {
-                if (!data.weekly.log[cwk]) data.weekly.log[cwk] = cloud.weekly.log[cwk];
+                if (!data.weekly.log[cwk]) { data.weekly.log[cwk] = cloud.weekly.log[cwk]; }
+                else {
+                  for (var cwid in cloud.weekly.log[cwk]) {
+                    if ((cloud.weekly.log[cwk][cwid] || 0) > (data.weekly.log[cwk][cwid] || 0)) {
+                      data.weekly.log[cwk][cwid] = cloud.weekly.log[cwk][cwid];
+                    }
+                  }
+                }
               }
             }
           }
@@ -3030,7 +3037,7 @@ function mergeFromCloud(showToast) {
       }
       if (!data.weekly) data.weekly = {items: [], log: {}};
       data.weekly.items = localItems;
-      // Merge weekly logs: combine all weeks, cloud wins per-item if newer
+      // Merge weekly logs: combine all weeks, always take higher count (counts only go up)
       if (cloud.weekly.log) {
         if (!data.weekly.log) data.weekly.log = {};
         var cloudLog = cloud.weekly.log;
@@ -3038,19 +3045,12 @@ function mergeFromCloud(showToast) {
           if (!data.weekly.log[wk]) {
             data.weekly.log[wk] = cloudLog[wk];
             weeklyChanged = true;
-          } else if (cloudIsNewer) {
-            // Cloud is newer — adopt cloud values for this week
-            for (var wid in cloudLog[wk]) {
-              if ((cloudLog[wk][wid] || 0) !== (data.weekly.log[wk][wid] || 0)) {
-                data.weekly.log[wk][wid] = cloudLog[wk][wid];
-                weeklyChanged = true;
-              }
-            }
           } else {
-            // Local is newer — adopt local values but fill in missing items from cloud
-            for (var wid2 in cloudLog[wk]) {
-              if (data.weekly.log[wk][wid2] === undefined) {
-                data.weekly.log[wk][wid2] = cloudLog[wk][wid2];
+            for (var wid in cloudLog[wk]) {
+              var cloudVal = cloudLog[wk][wid] || 0;
+              var localVal = data.weekly.log[wk][wid] || 0;
+              if (cloudVal > localVal) {
+                data.weekly.log[wk][wid] = cloudVal;
                 weeklyChanged = true;
               }
             }
