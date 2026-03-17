@@ -3219,10 +3219,33 @@ function init() {
     navigator.serviceWorker.register('./service-worker.js', {updateViaCache: 'none'});
   }
 
-  // Rule 2: Auto-merge when switching back to the app
+  // Rule 2: Auto-merge when switching back, flush when leaving
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible' && syncReady) {
       mergeFromCloud(false);
+    } else if (document.visibilityState === 'hidden' && syncReady) {
+      // Flush any pending debounced sync immediately
+      if (_syncDebounce) {
+        clearTimeout(_syncDebounce);
+        _syncDebounce = null;
+        var ep = getSyncUrl();
+        if (ep && data.tasks && data.tasks.length > 0) {
+          _doCloudSave(ep, false);
+        }
+      }
+    }
+  });
+
+  // Backup flush for app close / navigation
+  document.addEventListener('pagehide', function() {
+    if (!syncReady) return;
+    if (_syncDebounce) {
+      clearTimeout(_syncDebounce);
+      _syncDebounce = null;
+      var ep = getSyncUrl();
+      if (ep && data.tasks && data.tasks.length > 0) {
+        _doCloudSave(ep, false);
+      }
     }
   });
 
