@@ -2813,7 +2813,7 @@ function _doCloudSave(ep, showFeedback) {
   _saveInFlight = true;
 
   var syncData = getSyncPayload();
-  var CHUNK_SIZE = 3000;
+  var CHUNK_SIZE = 1800;
   var chunks = [];
   for (var i = 0; i < syncData.length; i += CHUNK_SIZE) {
     chunks.push(syncData.substring(i, i + CHUNK_SIZE));
@@ -3168,11 +3168,12 @@ function init() {
         data.tasks.forEach(function(t) { if (t.id) localMap[t.id] = t; });
         var merged = 0;
         var updated = 0;
+        var cloudIsNewer = (cloud.lastModified || 0) > (data.lastModified || 0);
         for (var i = 0; i < cloud.tasks.length; i++) {
           var ct = cloud.tasks[i];
           if (!ct.id || allDeleted.has(ct.id)) continue;
           if (localMap[ct.id]) {
-            if (JSON.stringify(localMap[ct.id]) !== JSON.stringify(ct)) {
+            if (cloudIsNewer && JSON.stringify(localMap[ct.id]) !== JSON.stringify(ct)) {
               var idx = data.tasks.indexOf(localMap[ct.id]);
               if (idx >= 0) { data.tasks[idx] = ct; updated++; }
             }
