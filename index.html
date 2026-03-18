@@ -2209,7 +2209,7 @@ function logWeeklyProgress(itemId) {
     const current = data.weekly.log[wk][itemId] || 0;
     var ch = Math.floor(current / 60), cm = Math.round(current % 60);
     var currentLabel = (ch ? ch + 'h ' : '') + cm + 'm';
-    const input = prompt('Add minutes for ' + item.text + '\n(current: ' + currentLabel + ' / ' + item.target + 'h)\n\nEnter minutes, e.g. 30 or 1.5h:', '30');
+    const input = prompt('Add minutes for ' + item.text + '\n(current: ' + currentLabel + ' / ' + item.target + 'h)\n\nEnter minutes, e.g. 30 or 1.5h:');
     if (input === null) return;
     var val;
     var trimmed = input.trim().toLowerCase();
