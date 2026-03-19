@@ -3008,8 +3008,19 @@ function mergeFromCloud(showToast) {
         delete localTaskMap[ct2.id];
       }
     }
-    // Then: any local-only tasks (not in cloud yet) at the end
-    data.tasks.forEach(function(t) { if (t.id && localTaskMap[t.id]) reordered.push(t); });
+    // Then: any local-only tasks (not in cloud yet) — insert at top of active tasks, not end
+    var localOnly = [];
+    data.tasks.forEach(function(t) { if (t.id && localTaskMap[t.id]) localOnly.push(t); });
+    if (localOnly.length > 0) {
+      // Find first priority/held/header task to insert before (same logic as addTask)
+      var insertAt = 0;
+      for (var li = 0; li < reordered.length; li++) {
+        var rt = reordered[li];
+        if (!rt.completedAt && (rt.priority || rt.hold || rt.isHeader)) { insertAt = li; break; }
+        if (li === reordered.length - 1) insertAt = reordered.length;
+      }
+      for (var lo = localOnly.length - 1; lo >= 0; lo--) reordered.splice(insertAt, 0, localOnly[lo]);
+    }
     var orderChanged = JSON.stringify(reordered.map(function(t){return t.id;})) !== JSON.stringify(data.tasks.map(function(t){return t.id;}));
     data.tasks = reordered;
 
@@ -3187,7 +3198,17 @@ function init() {
           var ct2 = cloud.tasks[k];
           if (ct2.id && localTaskMap2[ct2.id]) { reordered2.push(localTaskMap2[ct2.id]); delete localTaskMap2[ct2.id]; }
         }
-        data.tasks.forEach(function(t) { if (t.id && localTaskMap2[t.id]) reordered2.push(t); });
+        var localOnly2 = [];
+        data.tasks.forEach(function(t) { if (t.id && localTaskMap2[t.id]) localOnly2.push(t); });
+        if (localOnly2.length > 0) {
+          var insertAt2 = 0;
+          for (var li2 = 0; li2 < reordered2.length; li2++) {
+            var rt2 = reordered2[li2];
+            if (!rt2.completedAt && (rt2.priority || rt2.hold || rt2.isHeader)) { insertAt2 = li2; break; }
+            if (li2 === reordered2.length - 1) insertAt2 = reordered2.length;
+          }
+          for (var lo2 = localOnly2.length - 1; lo2 >= 0; lo2--) reordered2.splice(insertAt2, 0, localOnly2[lo2]);
+        }
         var orderChanged2 = JSON.stringify(reordered2.map(function(t){return t.id;})) !== JSON.stringify(data.tasks.map(function(t){return t.id;}));
         data.tasks = reordered2;
 
