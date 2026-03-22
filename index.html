@@ -2823,43 +2823,37 @@ function _doCloudSave(ep, showFeedback) {
 
   if (showFeedback) toast('Syncing ' + data.tasks.length + ' tasks...');
 
-  var completed = 0;
-  var anyFailed = false;
-
-  function onChunkDone(err) {
-    if (err) anyFailed = true;
-    completed++;
-    if (completed < chunks.length) return;
-    if (anyFailed) {
-      _saveInFlight = false;
-      if (showFeedback) { showSyncWarning(true); toast('Sync failed — chunks did not save'); }
-      if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 2000); }
+  // Send chunks SEQUENTIALLY — parallel writes corrupt Google Sheets
+  function sendChunk(idx) {
+    if (idx >= chunks.length) {
+      // All chunks sent — assemble
+      jsonpFetch(ep + '?action=save_done&n=' + chunks.length, function(err2, resp2) {
+        _saveInFlight = false;
+        if (!err2 && resp2 && resp2.ok) {
+          showSyncWarning(false);
+          console.warn('[SYNC] SAVE SUCCESS — ' + chunks.length + ' chunks assembled');
+          if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
+        } else {
+          console.warn('[SYNC] SAVE FAILED — save_done error:', err2, resp2);
+          if (showFeedback) { showSyncWarning(true); toast('Sync assembly failed'); }
+        }
+        if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 1000); }
+      });
       return;
     }
-    // All chunks saved — assemble
-    jsonpFetch(ep + '?action=save_done&n=' + chunks.length, function(err2, resp2) {
-      _saveInFlight = false;
-      if (!err2 && resp2 && resp2.ok) {
-        showSyncWarning(false);
-        console.warn('[SYNC] SAVE SUCCESS — ' + chunks.length + ' chunks assembled');
-        if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
-      } else {
-        console.warn('[SYNC] SAVE FAILED — save_done error:', err2, resp2);
-        if (showFeedback) { showSyncWarning(true); toast('Sync assembly failed'); }
+    var url = ep + '?action=save_chunk&i=' + idx + '&cd=' + encodeURIComponent(chunks[idx]);
+    jsonpFetch(url, function(err, resp) {
+      if (err || !resp || !resp.ok) {
+        console.warn('[SYNC] chunk ' + idx + ' FAILED');
+        _saveInFlight = false;
+        if (showFeedback) { showSyncWarning(true); toast('Sync failed — chunk ' + idx); }
+        if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 2000); }
+        return;
       }
-      if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 1000); }
+      sendChunk(idx + 1);
     });
   }
-
-  // Fire all chunks in parallel via JSONP GET
-  for (var j = 0; j < chunks.length; j++) {
-    (function(idx) {
-      var url = ep + '?action=save_chunk&i=' + idx + '&cd=' + encodeURIComponent(chunks[idx]);
-      jsonpFetch(url, function(err, resp) {
-        onChunkDone(err || (!resp || !resp.ok ? 'chunk error' : null));
-      });
-    })(j);
-  }
+  sendChunk(0);
 }
 
 // Auto-sync: debounce 1.5s then pull-merge-push
