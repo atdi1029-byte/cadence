@@ -13,7 +13,7 @@
   // Clear Cadence data so app restores from cloud
   localStorage.removeItem('cadence_data_v1');
   document.querySelector('h2').textContent = 'Done! Redirecting...';
-  setTimeout(function() { window.location.href = './index.html'; }, 1000);
+  setTimeout(function() { window.location.href = './index.html?_=' + Date.now(); }, 1000);
 })();
 </script>
 </body>
