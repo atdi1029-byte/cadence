@@ -867,6 +867,7 @@ function saveData() {
   data.lastModified = Date.now();
   _lastLocalSave = Date.now();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  console.log('[SYNC] saveData called, syncReady=' + syncReady);
   syncToCloud();
 }
 
@@ -2806,8 +2807,9 @@ var _savePending = false;
 var _syncDebounce = null;
 
 function _doCloudSave(ep, showFeedback) {
-  if (_saveInFlight) { _savePending = true; return; }
+  if (_saveInFlight) { _savePending = true; console.log('[SYNC] _doCloudSave queued (already in flight)'); return; }
   _saveInFlight = true;
+  console.log('[SYNC] _doCloudSave starting...');
 
   var syncData = getSyncPayload();
   var CHUNK_SIZE = 1800;
@@ -2836,8 +2838,10 @@ function _doCloudSave(ep, showFeedback) {
       _saveInFlight = false;
       if (!err2 && resp2 && resp2.ok) {
         showSyncWarning(false);
+        console.log('[SYNC] SAVE SUCCESS — ' + chunks.length + ' chunks assembled');
         if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
       } else {
+        console.log('[SYNC] SAVE FAILED — save_done error:', err2, resp2);
         if (showFeedback) { showSyncWarning(true); toast('Sync assembly failed'); }
       }
       if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 1000); }
@@ -2857,12 +2861,14 @@ function _doCloudSave(ep, showFeedback) {
 
 // Auto-sync: debounce 1.5s then pull-merge-push
 function syncToCloud() {
-  if (!syncReady) return;
+  console.log('[SYNC] syncToCloud: syncReady=' + syncReady + ', ep=' + !!getSyncUrl() + ', tasks=' + (data.tasks||[]).length);
+  if (!syncReady) { console.log('[SYNC] BLOCKED — syncReady is false'); return; }
   var ep = getSyncUrl();
-  if (!ep) return;
-  if (!data.tasks || data.tasks.length === 0) return;
+  if (!ep) { console.log('[SYNC] BLOCKED — no endpoint'); return; }
+  if (!data.tasks || data.tasks.length === 0) { console.log('[SYNC] BLOCKED — no tasks'); return; }
   clearTimeout(_syncDebounce);
   _syncDebounce = setTimeout(function() {
+    console.log('[SYNC] Debounce fired — pulling cloud...');
     // Pull cloud first, merge, then push merged result
     jsonpFetch(ep + '?action=load', function(err, resp) {
       if (!err && resp && resp.ok && resp.data) {
@@ -2911,6 +2917,7 @@ function syncToCloud() {
         }
       }
       // Push merged data to cloud
+      console.log('[SYNC] Cloud pull done, pushing merged data...');
       _doCloudSave(ep, false);
     });
   }, 1500);
@@ -3100,9 +3107,12 @@ function init() {
 
   // Rule 4: On open, pull from cloud and merge
   var ep = getSyncUrl();
+  console.log('[SYNC] init: ep=' + !!ep);
   if (ep) {
     var localEmpty = !data.tasks || data.tasks.length === 0;
+    console.log('[SYNC] init: localEmpty=' + localEmpty + ', loading cloud...');
     jsonpFetch(ep + '?action=load', function(err, resp) {
+      console.log('[SYNC] init cloud load result: err=' + err + ', hasData=' + !!(resp && resp.data));
       if (err || !resp || !resp.ok) {
         toast('Cloud load failed: ' + (err || 'bad response'));
         syncReady = true;
