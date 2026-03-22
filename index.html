@@ -2812,9 +2812,9 @@ var _syncDebounce = null;
 function _doCloudSave(ep, showFeedback) {
   if (_saveInFlight) { _savePending = true; console.warn('[SYNC] _doCloudSave queued (already in flight)'); return; }
   _saveInFlight = true;
-  console.warn('[SYNC] _doCloudSave starting...');
-
   var syncData = getSyncPayload();
+  console.warn('[SYNC] _doCloudSave: ' + syncData.length + ' chars, tasks=' + (data.tasks||[]).length);
+  if (syncData.length > 49000) console.warn('[SYNC] WARNING: payload near 50K Sheets limit!');
   var CHUNK_SIZE = 1800;
   var chunks = [];
   for (var i = 0; i < syncData.length; i += CHUNK_SIZE) {
@@ -2831,7 +2831,16 @@ function _doCloudSave(ep, showFeedback) {
         _saveInFlight = false;
         if (!err2 && resp2 && resp2.ok) {
           showSyncWarning(false);
-          console.warn('[SYNC] SAVE SUCCESS — ' + chunks.length + ' chunks assembled');
+          console.warn('[SYNC] SAVE SUCCESS — ' + chunks.length + ' chunks, server size=' + (resp2.size||'?'));
+          // Verify: load back and check
+          jsonpFetch(ep + '?action=load', function(ve, vr) {
+            if (!ve && vr && vr.data) {
+              var vd; try { vd = typeof vr.data === 'string' ? JSON.parse(vr.data) : vr.data; } catch(x) { vd = null; }
+              console.warn('[SYNC] VERIFY: cloud has ' + (vd && vd.tasks ? vd.tasks.length : '??') + ' tasks');
+            } else {
+              console.warn('[SYNC] VERIFY failed:', ve);
+            }
+          });
           if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
         } else {
           console.warn('[SYNC] SAVE FAILED — save_done error:', err2, resp2);
