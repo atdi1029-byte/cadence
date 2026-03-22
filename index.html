@@ -2791,16 +2791,36 @@ function jsonpFetch(url, callback) {
   document.head.appendChild(script);
 }
 
-// Build cloud-safe payload: strip history + freq (local-only, too large for Sheets 50K cell limit)
+// Build cloud-safe payload: strip history + freq + old completed tasks (50K Sheets cell limit)
 function getSyncPayload() {
+  var allTasks = data.tasks || [];
+  // Keep all active tasks + completed within last 14 days (max 50 completed)
+  var cutoff = Date.now() - (14 * 24 * 60 * 60 * 1000);
+  var active = [];
+  var completed = [];
+  for (var i = 0; i < allTasks.length; i++) {
+    var t = allTasks[i];
+    if (!t.completedAt) {
+      active.push(t);
+    } else {
+      var completedTime = new Date(t.completedAt).getTime();
+      if (completedTime > cutoff) completed.push(t);
+    }
+  }
+  // Sort completed by most recent, cap at 50
+  completed.sort(function(a, b) { return new Date(b.completedAt) - new Date(a.completedAt); });
+  if (completed.length > 50) completed = completed.slice(0, 50);
+  var syncTasks = active.concat(completed);
+  // Cap deletedIds at most recent 50
+  var delIds = (data.deletedIds || []).slice(-50);
   return JSON.stringify({
-    tasks: data.tasks || [],
+    tasks: syncTasks,
     templates: data.templates || [],
     settings: data.settings || {},
     monthly: data.monthly || {},
     weekly: data.weekly || {},
     lastModified: data.lastModified || 0,
-    deletedIds: data.deletedIds || []
+    deletedIds: delIds
   });
 }
 
