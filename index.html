@@ -867,7 +867,7 @@ function saveData() {
   data.lastModified = Date.now();
   _lastLocalSave = Date.now();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  console.log('[SYNC] saveData called, syncReady=' + syncReady);
+  console.warn('[SYNC] saveData called, syncReady=' + syncReady);
   syncToCloud();
 }
 
@@ -2769,6 +2769,8 @@ function getSyncUrl() {
 // JSONP helper — bypasses CORS by loading script tag (same as proven load mechanism)
 let _jsonpCounter = 0;
 function jsonpFetch(url, callback) {
+  var action = (url.match(/action=([^&]+)/) || [])[1] || '?';
+  console.warn('[JSONP] >> ' + action + ' ' + url.substring(0, 120));
   const cbName = '_cadenceCb_' + Date.now() + '_' + (++_jsonpCounter);
   const script = document.createElement('script');
   let done = false;
@@ -2776,14 +2778,15 @@ function jsonpFetch(url, callback) {
     done = true;
     delete window[cbName];
     script.remove();
+    console.warn('[JSONP] << ' + action + ' OK', resp && resp.ok ? 'ok' : 'fail');
     callback(null, resp);
   };
   script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName;
   script.onerror = function() {
-    if (!done) { done = true; delete window[cbName]; script.remove(); callback('Script load failed'); }
+    if (!done) { done = true; delete window[cbName]; script.remove(); console.warn('[JSONP] << ' + action + ' SCRIPT ERROR'); callback('Script load failed'); }
   };
   setTimeout(function() {
-    if (!done) { done = true; delete window[cbName]; script.remove(); callback('Timeout'); }
+    if (!done) { done = true; delete window[cbName]; script.remove(); console.warn('[JSONP] << ' + action + ' TIMEOUT'); callback('Timeout'); }
   }, 20000);
   document.head.appendChild(script);
 }
@@ -2807,9 +2810,9 @@ var _savePending = false;
 var _syncDebounce = null;
 
 function _doCloudSave(ep, showFeedback) {
-  if (_saveInFlight) { _savePending = true; console.log('[SYNC] _doCloudSave queued (already in flight)'); return; }
+  if (_saveInFlight) { _savePending = true; console.warn('[SYNC] _doCloudSave queued (already in flight)'); return; }
   _saveInFlight = true;
-  console.log('[SYNC] _doCloudSave starting...');
+  console.warn('[SYNC] _doCloudSave starting...');
 
   var syncData = getSyncPayload();
   var CHUNK_SIZE = 1800;
@@ -2838,10 +2841,10 @@ function _doCloudSave(ep, showFeedback) {
       _saveInFlight = false;
       if (!err2 && resp2 && resp2.ok) {
         showSyncWarning(false);
-        console.log('[SYNC] SAVE SUCCESS — ' + chunks.length + ' chunks assembled');
+        console.warn('[SYNC] SAVE SUCCESS — ' + chunks.length + ' chunks assembled');
         if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
       } else {
-        console.log('[SYNC] SAVE FAILED — save_done error:', err2, resp2);
+        console.warn('[SYNC] SAVE FAILED — save_done error:', err2, resp2);
         if (showFeedback) { showSyncWarning(true); toast('Sync assembly failed'); }
       }
       if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 1000); }
@@ -2861,14 +2864,14 @@ function _doCloudSave(ep, showFeedback) {
 
 // Auto-sync: debounce 1.5s then pull-merge-push
 function syncToCloud() {
-  console.log('[SYNC] syncToCloud: syncReady=' + syncReady + ', ep=' + !!getSyncUrl() + ', tasks=' + (data.tasks||[]).length);
-  if (!syncReady) { console.log('[SYNC] BLOCKED — syncReady is false'); return; }
+  console.warn('[SYNC] syncToCloud: syncReady=' + syncReady + ', ep=' + !!getSyncUrl() + ', tasks=' + (data.tasks||[]).length);
+  if (!syncReady) { console.warn('[SYNC] BLOCKED — syncReady is false'); return; }
   var ep = getSyncUrl();
-  if (!ep) { console.log('[SYNC] BLOCKED — no endpoint'); return; }
-  if (!data.tasks || data.tasks.length === 0) { console.log('[SYNC] BLOCKED — no tasks'); return; }
+  if (!ep) { console.warn('[SYNC] BLOCKED — no endpoint'); return; }
+  if (!data.tasks || data.tasks.length === 0) { console.warn('[SYNC] BLOCKED — no tasks'); return; }
   clearTimeout(_syncDebounce);
   _syncDebounce = setTimeout(function() {
-    console.log('[SYNC] Debounce fired — pulling cloud...');
+    console.warn('[SYNC] Debounce fired — pulling cloud...');
     // Pull cloud first, merge, then push merged result
     jsonpFetch(ep + '?action=load', function(err, resp) {
       if (!err && resp && resp.ok && resp.data) {
@@ -2917,7 +2920,7 @@ function syncToCloud() {
         }
       }
       // Push merged data to cloud
-      console.log('[SYNC] Cloud pull done, pushing merged data...');
+      console.warn('[SYNC] Cloud pull done, pushing merged data...');
       _doCloudSave(ep, false);
     });
   }, 1500);
@@ -3107,12 +3110,12 @@ function init() {
 
   // Rule 4: On open, pull from cloud and merge
   var ep = getSyncUrl();
-  console.log('[SYNC] init: ep=' + !!ep);
+  console.warn('[SYNC] init: ep=' + !!ep);
   if (ep) {
     var localEmpty = !data.tasks || data.tasks.length === 0;
-    console.log('[SYNC] init: localEmpty=' + localEmpty + ', loading cloud...');
+    console.warn('[SYNC] init: localEmpty=' + localEmpty + ', loading cloud...');
     jsonpFetch(ep + '?action=load', function(err, resp) {
-      console.log('[SYNC] init cloud load result: err=' + err + ', hasData=' + !!(resp && resp.data));
+      console.warn('[SYNC] init cloud load result: err=' + err + ', hasData=' + !!(resp && resp.data));
       if (err || !resp || !resp.ok) {
         toast('Cloud load failed: ' + (err || 'bad response'));
         syncReady = true;
