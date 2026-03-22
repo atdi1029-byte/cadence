@@ -2996,33 +2996,9 @@ function mergeFromCloud(showToast) {
       }
     }
 
-    // Adopt cloud's task order ONLY if cloud is newer (preserve local reorder otherwise)
+    // Never adopt cloud order mid-session — local drag order always wins.
+    // Cloud order is only adopted on fresh app open (in init).
     var orderChanged = false;
-    if (cloudIsNewer) {
-      var localTaskMap = {};
-      data.tasks.forEach(function(t) { if (t.id) localTaskMap[t.id] = t; });
-      var reordered = [];
-      for (var k = 0; k < cloud.tasks.length; k++) {
-        var ct2 = cloud.tasks[k];
-        if (ct2.id && localTaskMap[ct2.id]) {
-          reordered.push(localTaskMap[ct2.id]);
-          delete localTaskMap[ct2.id];
-        }
-      }
-      var localOnly = [];
-      data.tasks.forEach(function(t) { if (t.id && localTaskMap[t.id]) localOnly.push(t); });
-      if (localOnly.length > 0) {
-        var insertAt = 0;
-        for (var li = 0; li < reordered.length; li++) {
-          var rt = reordered[li];
-          if (!rt.completedAt && (rt.priority || rt.hold || rt.isHeader)) { insertAt = li; break; }
-          if (li === reordered.length - 1) insertAt = reordered.length;
-        }
-        for (var lo = localOnly.length - 1; lo >= 0; lo--) reordered.splice(insertAt, 0, localOnly[lo]);
-      }
-      orderChanged = JSON.stringify(reordered.map(function(t){return t.id;})) !== JSON.stringify(data.tasks.map(function(t){return t.id;}));
-      data.tasks = reordered;
-    }
 
     // Merge weekly data: cloud wins if it has newer/more items
     var weeklyChanged = false;
@@ -3076,7 +3052,7 @@ function mergeFromCloud(showToast) {
       }
     }
 
-    if (merged > 0 || updated > 0 || orderChanged || data.tasks.length !== beforeCount || weeklyChanged || monthlyChanged) {
+    if (merged > 0 || updated > 0 || data.tasks.length !== beforeCount || weeklyChanged || monthlyChanged) {
       data.lastModified = Date.now();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       renderTasks();

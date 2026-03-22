@@ -11,7 +11,7 @@
   const keys = await caches.keys();
   for (const k of keys) await caches.delete(k);
   // Clear Cadence data so app restores from cloud
-  localStorage.removeItem('cadence_data');
+  localStorage.removeItem('cadence_data_v1');
   document.querySelector('h2').textContent = 'Done! Redirecting...';
   setTimeout(function() { window.location.href = './index.html'; }, 1000);
 })();
