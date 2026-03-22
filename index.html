@@ -2865,6 +2865,34 @@ function _doCloudSave(ep, showFeedback) {
   sendChunk(0);
 }
 
+// === DEBUG: run window.testSave() from console to test if JSONP writes actually persist ===
+window.testSave = function() {
+  var ep = getSyncUrl();
+  var testData = '{"tasks":[{"id":"verify_' + Date.now() + '","text":"SAVE VERIFY TEST","createdAt":"' + new Date().toISOString() + '"}],"lastModified":' + Date.now() + '}';
+  console.warn('[TEST] Saving ' + testData.length + ' chars via single chunk...');
+  jsonpFetch(ep + '?action=save_chunk&i=0&cd=' + encodeURIComponent(testData), function(e1, r1) {
+    console.warn('[TEST] chunk result:', e1, r1);
+    jsonpFetch(ep + '?action=save_done&n=1', function(e2, r2) {
+      console.warn('[TEST] save_done result:', e2, r2);
+      // Now load back and verify
+      setTimeout(function() {
+        jsonpFetch(ep + '?action=load', function(e3, r3) {
+          if (!e3 && r3 && r3.data) {
+            var d; try { d = typeof r3.data === 'string' ? JSON.parse(r3.data) : r3.data; } catch(x) {}
+            if (d && d.tasks && d.tasks[0] && d.tasks[0].text === 'SAVE VERIFY TEST') {
+              console.warn('[TEST] SUCCESS — browser JSONP saves work!');
+            } else {
+              console.warn('[TEST] FAIL — data did not persist. Got:', r3.data && r3.data.substring(0, 200));
+            }
+          } else {
+            console.warn('[TEST] FAIL — load error:', e3);
+          }
+        });
+      }, 2000);
+    });
+  });
+};
+
 // Auto-sync: debounce 1.5s then pull-merge-push
 function syncToCloud() {
   console.warn('[SYNC] syncToCloud: syncReady=' + syncReady + ', ep=' + !!getSyncUrl() + ', tasks=' + (data.tasks||[]).length);
