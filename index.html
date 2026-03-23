@@ -2787,7 +2787,7 @@ function jsonpFetch(url, callback) {
   };
   setTimeout(function() {
     if (!done) { done = true; delete window[cbName]; script.remove(); console.warn('[JSONP] << ' + action + ' TIMEOUT'); callback('Timeout'); }
-  }, 20000);
+  }, 45000);
   document.head.appendChild(script);
 }
 
@@ -2873,10 +2873,20 @@ function _doCloudSave(ep, showFeedback) {
     var url = ep + '?action=save_chunk&i=' + idx + '&cd=' + encodeURIComponent(chunks[idx]);
     jsonpFetch(url, function(err, resp) {
       if (err || !resp || !resp.ok) {
-        console.warn('[SYNC] chunk ' + idx + ' FAILED');
-        _saveInFlight = false;
-        if (showFeedback) { showSyncWarning(true); toast('Sync failed — chunk ' + idx); }
-        if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 2000); }
+        console.warn('[SYNC] chunk ' + idx + ' FAILED (' + (err||'bad resp') + '), retrying...');
+        // Retry once after 2s
+        setTimeout(function() {
+          jsonpFetch(url, function(err2, resp2) {
+            if (err2 || !resp2 || !resp2.ok) {
+              console.warn('[SYNC] chunk ' + idx + ' RETRY FAILED');
+              _saveInFlight = false;
+              if (showFeedback) { showSyncWarning(true); toast('Sync failed — chunk ' + idx); }
+              if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 2000); }
+              return;
+            }
+            sendChunk(idx + 1);
+          });
+        }, 2000);
         return;
       }
       sendChunk(idx + 1);
