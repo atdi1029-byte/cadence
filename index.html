@@ -2957,10 +2957,16 @@ function syncToCloud() {
           // Merge weekly/monthly from cloud (local wins since we're about to push)
           if (cloud.weekly) {
             if (!data.weekly) data.weekly = {items:[], log:{}};
-            var localWIds = new Set((data.weekly.items||[]).map(function(x){return x.id;}));
-            (cloud.weekly.items||[]).forEach(function(ci) {
-              if (!localWIds.has(ci.id)) data.weekly.items.push(ci);
-            });
+            // If local weekly is empty but cloud has items, restore fully (cache wipe recovery)
+            var localWeeklyEmpty = !data.weekly.items || data.weekly.items.length === 0;
+            if (localWeeklyEmpty && cloud.weekly.items && cloud.weekly.items.length > 0) {
+              data.weekly.items = cloud.weekly.items.slice();
+            } else {
+              var localWIds = new Set((data.weekly.items||[]).map(function(x){return x.id;}));
+              (cloud.weekly.items||[]).forEach(function(ci) {
+                if (!localWIds.has(ci.id)) data.weekly.items.push(ci);
+              });
+            }
             if (cloud.weekly.log) {
               if (!data.weekly.log) data.weekly.log = {};
               for (var cwk in cloud.weekly.log) {
@@ -2975,7 +2981,12 @@ function syncToCloud() {
               }
             }
           }
-          if (cloud.monthly && !data.monthly) data.monthly = cloud.monthly;
+          // Restore cloud monthly if local is empty (e.g. after cache wipe)
+          if (cloud.monthly && cloud.monthly.items && cloud.monthly.items.length > 0) {
+            if (!data.monthly || !data.monthly.items || data.monthly.items.length === 0) {
+              data.monthly = cloud.monthly;
+            }
+          }
           // preserve user's manual order — new tasks append at end
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         }
@@ -3131,12 +3142,15 @@ function mergeFromCloud(showToast) {
       }
     }
 
-    // Merge monthly data: cloud wins if newer
+    // Merge monthly data: cloud wins if newer, OR if local is empty (cache wipe recovery)
     var monthlyChanged = false;
-    if (cloud.monthly && cloudIsNewer) {
-      if (JSON.stringify(data.monthly || {}) !== JSON.stringify(cloud.monthly)) {
-        data.monthly = cloud.monthly;
-        monthlyChanged = true;
+    if (cloud.monthly && cloud.monthly.items && cloud.monthly.items.length > 0) {
+      var localMonthlyEmpty = !data.monthly || !data.monthly.items || data.monthly.items.length === 0;
+      if (localMonthlyEmpty || cloudIsNewer) {
+        if (JSON.stringify(data.monthly || {}) !== JSON.stringify(cloud.monthly)) {
+          data.monthly = cloud.monthly;
+          monthlyChanged = true;
+        }
       }
     }
 
