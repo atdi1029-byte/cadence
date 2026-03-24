@@ -3018,6 +3018,47 @@ function syncToCloud() {
   }, 1500);
 }
 
+// Full restore from cloud — replaces local with cloud data
+function loadFromCloud(showFeedback) {
+  var ep = getSyncUrl();
+  if (!ep) { if (showFeedback) toast('No sync URL set'); return; }
+  if (showFeedback) toast('Loading from cloud...');
+  jsonpFetch(ep + '?action=load', function(err, resp) {
+    if (err || !resp || !resp.ok || !resp.data) {
+      if (showFeedback) toast('Cloud load failed: ' + (err || 'no data'));
+      return;
+    }
+    var cloud;
+    try {
+      cloud = typeof resp.data === 'string'
+        ? JSON.parse(resp.data) : resp.data;
+    } catch(e) {
+      if (showFeedback) toast('Cloud data corrupt');
+      return;
+    }
+    if (!cloud || !cloud.tasks) {
+      if (showFeedback) toast('Cloud is empty');
+      return;
+    }
+    // Keep local history/freq, replace everything else
+    var localHistory = data.history || [];
+    var localFreq = data.freq || {};
+    data = cloud;
+    data.history = localHistory;
+    data.freq = localFreq;
+    if (!data.templates) data.templates = [];
+    if (!data.monthly) data.monthly = {items:[], done:{}};
+    if (!data.weekly) data.weekly = {items:[], log:{}};
+    data.lastModified = Date.now();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    renderTasks();
+    renderSuggestions();
+    renderTemplateSuggestions();
+    if (showFeedback)
+      toast('Restored ' + cloud.tasks.length + ' tasks from cloud');
+  });
+}
+
 // Manual Push to Cloud: save + verify
 function doSync(showFeedback) {
   var ep = getSyncUrl();
