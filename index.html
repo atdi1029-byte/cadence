@@ -2941,6 +2941,7 @@ function syncToCloud() {
   if (!data.tasks || data.tasks.length === 0) { console.warn('[SYNC] BLOCKED — no tasks'); return; }
   clearTimeout(_syncDebounce);
   _syncDebounce = setTimeout(function() {
+    _syncDebounce = null;
     console.warn('[SYNC] Debounce fired — pulling cloud...');
     // Pull cloud first, merge, then push merged result
     jsonpFetch(ep + '?action=load', function(err, resp) {
@@ -3391,20 +3392,38 @@ function init() {
     navigator.serviceWorker.register('./service-worker.js', {updateViaCache: 'none'});
   }
 
-  // Rule 2: Auto-merge when switching back, flush when leaving
+  // Beacon save — single atomic POST that survives page background/close
+  function beaconSave() {
+    var ep = getSyncUrl();
+    if (!ep || !syncReady) return;
+    if (!data.tasks || data.tasks.length === 0) return;
+    var payload = getSyncPayload();
+    var body = JSON.stringify({action: 'save', data: payload});
+    if (navigator.sendBeacon) {
+      var blob = new Blob([body], {type: 'text/plain'});
+      var sent = navigator.sendBeacon(ep, blob);
+      console.warn('[SYNC] sendBeacon: ' + sent +
+        ', ' + payload.length + ' chars');
+    } else {
+      // Fallback: fire-and-forget fetch
+      try {
+        fetch(ep, {method:'POST', body: body,
+          keepalive: true, mode: 'no-cors'});
+      } catch(e) {}
+    }
+  }
+
+  // Rule 2: Auto-merge when switching back, beacon-save when leaving
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible' && syncReady) {
       mergeFromCloud(false);
     } else if (document.visibilityState === 'hidden' && syncReady) {
-      // Flush any pending debounced sync immediately
+      // Cancel any pending debounce — we're saving NOW via beacon
       if (_syncDebounce) {
         clearTimeout(_syncDebounce);
         _syncDebounce = null;
-        var ep = getSyncUrl();
-        if (ep && data.tasks && data.tasks.length > 0) {
-          _doCloudSave(ep, false);
-        }
       }
+      beaconSave();
     }
   });
 
@@ -3414,11 +3433,8 @@ function init() {
     if (_syncDebounce) {
       clearTimeout(_syncDebounce);
       _syncDebounce = null;
-      var ep = getSyncUrl();
-      if (ep && data.tasks && data.tasks.length > 0) {
-        _doCloudSave(ep, false);
-      }
     }
+    beaconSave();
   });
 
   // Periodic cloud poll — catch changes from other devices even without tab switch
