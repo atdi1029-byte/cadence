@@ -1017,7 +1017,8 @@ function addTask(text, category, opts) {
     dueTime: opts.dueTime || null,
     fromTemplate: opts.fromTemplate || null,
     fromSuggestion: opts.fromSuggestion || false,
-    priority: opts.priority || 0
+    priority: opts.priority || 0,
+    updatedAt: Date.now()
   };
   // Insert before any starred/priority tasks, spacers, or held tasks
   let insertIdx = -1;
@@ -1122,11 +1123,13 @@ function completeTask(id) {
   if (task.completedAt) {
     // Un-complete
     task.completedAt = null;
+    task.updatedAt = Date.now();
     saveData();
     renderTasks();
     return;
   }
   task.completedAt = new Date().toISOString();
+  task.updatedAt = Date.now();
   recordCompletion(task);
   saveData();
 
@@ -1144,7 +1147,7 @@ function completeTask(id) {
   const undoTask = JSON.parse(JSON.stringify(task));
   toast('Task completed', function() {
     const t = data.tasks.find(x => x.id === id);
-    if (t) { t.completedAt = null; saveData(); renderTasks(); renderSuggestions(); }
+    if (t) { t.completedAt = null; t.updatedAt = Date.now(); saveData(); renderTasks(); renderSuggestions(); }
   });
 }
 
@@ -1161,6 +1164,7 @@ function deleteTask(id) {
   toast('Task deleted', function() {
     // Undo: remove from deletedIds and restore task
     data.deletedIds = (data.deletedIds || []).filter(d => d !== id);
+    removed.updatedAt = Date.now();
     data.tasks.push(removed);
     saveData();
     renderTasks();
@@ -1172,6 +1176,7 @@ function togglePriority(id) {
   const task = data.tasks.find(t => t.id === id);
   if (!task) return;
   task.priority = task.priority ? 0 : 1;
+  task.updatedAt = Date.now();
   saveData();
   renderTasks();
 }
@@ -1358,6 +1363,7 @@ function toggleSubtask(taskId, subIndex) {
     recordCompletion(task);
     toast('All done!');
   }
+  task.updatedAt = Date.now();
   saveData();
   renderTasks();
 }
@@ -1580,6 +1586,7 @@ function saveEdit(id) {
     if (v) newSubs.push({text: v, done: oldSubs[i] ? oldSubs[i].done : false});
   });
   task.subtasks = newSubs;
+  task.updatedAt = Date.now();
   saveData();
   closeModal();
   renderTasks();
@@ -2864,7 +2871,8 @@ function _doCloudSave(ep, showFeedback) {
           if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
         } else {
           console.warn('[SYNC] SAVE FAILED — save_done error:', err2, resp2);
-          if (showFeedback) { showSyncWarning(true); toast('Sync assembly failed'); }
+          showSyncWarning(true);
+          if (showFeedback) toast('Sync assembly failed');
         }
         if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 1000); }
       });
@@ -2880,7 +2888,8 @@ function _doCloudSave(ep, showFeedback) {
             if (err2 || !resp2 || !resp2.ok) {
               console.warn('[SYNC] chunk ' + idx + ' RETRY FAILED');
               _saveInFlight = false;
-              if (showFeedback) { showSyncWarning(true); toast('Sync failed — chunk ' + idx); }
+              showSyncWarning(true);
+              if (showFeedback) toast('Sync failed — chunk ' + idx);
               if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 2000); }
               return;
             }
@@ -2947,12 +2956,23 @@ function syncToCloud() {
           }
           var allDeleted = new Set(data.deletedIds);
           data.tasks = data.tasks.filter(function(t) { return !cloudDeleted.has(t.id); });
-          // Only add new tasks from cloud — local wins for existing tasks (user just edited)
-          var localIds = new Set(data.tasks.map(function(t) { return t.id; }));
+          // Per-task merge: compare updatedAt timestamps, newer wins
+          var localMap = {};
+          data.tasks.forEach(function(t) { if (t.id) localMap[t.id] = t; });
           for (var i = 0; i < cloud.tasks.length; i++) {
             var ct = cloud.tasks[i];
-            if (!ct.id || allDeleted.has(ct.id) || localIds.has(ct.id)) continue;
-            data.tasks.push(ct);
+            if (!ct.id || allDeleted.has(ct.id)) continue;
+            if (localMap[ct.id]) {
+              var lt = localMap[ct.id];
+              var localU = lt.updatedAt || 0;
+              var cloudU = ct.updatedAt || 0;
+              if (cloudU > localU && JSON.stringify(lt) !== JSON.stringify(ct)) {
+                var idx = data.tasks.indexOf(lt);
+                if (idx >= 0) data.tasks[idx] = ct;
+              }
+            } else {
+              data.tasks.push(ct);
+            }
           }
           // Merge weekly/monthly from cloud (local wins since we're about to push)
           if (cloud.weekly) {
@@ -3056,9 +3076,13 @@ function mergeFromCloud(showToast) {
       var ct = cloud.tasks[i];
       if (!ct.id || allDeleted.has(ct.id)) continue;
       if (localMap[ct.id]) {
-        // Only overwrite local with cloud version if cloud is actually newer
-        if (cloudIsNewer && JSON.stringify(localMap[ct.id]) !== JSON.stringify(ct)) {
-          var idx = data.tasks.indexOf(localMap[ct.id]);
+        // Per-task comparison: use updatedAt if available, fall back to global
+        var lt = localMap[ct.id];
+        var localU = lt.updatedAt || 0;
+        var cloudU = ct.updatedAt || 0;
+        var useCloud = (cloudU && localU) ? (cloudU > localU) : cloudIsNewer;
+        if (useCloud && JSON.stringify(lt) !== JSON.stringify(ct)) {
+          var idx = data.tasks.indexOf(lt);
           if (idx >= 0) { data.tasks[idx] = ct; updated++; }
         }
       } else {
@@ -3262,8 +3286,12 @@ function init() {
           var ct = cloud.tasks[i];
           if (!ct.id || allDeleted.has(ct.id)) continue;
           if (localMap[ct.id]) {
-            if (cloudIsNewer && JSON.stringify(localMap[ct.id]) !== JSON.stringify(ct)) {
-              var idx = data.tasks.indexOf(localMap[ct.id]);
+            var lt2 = localMap[ct.id];
+            var localU2 = lt2.updatedAt || 0;
+            var cloudU2 = ct.updatedAt || 0;
+            var useCloud2 = (cloudU2 && localU2) ? (cloudU2 > localU2) : cloudIsNewer;
+            if (useCloud2 && JSON.stringify(lt2) !== JSON.stringify(ct)) {
+              var idx = data.tasks.indexOf(lt2);
               if (idx >= 0) { data.tasks[idx] = ct; updated++; }
             }
           } else {
@@ -3351,6 +3379,11 @@ function init() {
       }
     }
   });
+
+  // Periodic cloud poll — catch changes from other devices even without tab switch
+  setInterval(function() {
+    if (syncReady && document.visibilityState === 'visible') mergeFromCloud(false);
+  }, 30000);
 
   // Auto-refresh theme every minute
   setInterval(function() {
