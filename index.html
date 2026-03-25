@@ -3036,7 +3036,8 @@ function loadFromCloud(showFeedback) {
       cloud = typeof resp.data === 'string'
         ? JSON.parse(resp.data) : resp.data;
     } catch(e) {
-      if (showFeedback) toast('Cloud data corrupt');
+      console.warn('[RESTORE] Parse error:', e.message, 'data type:', typeof resp.data, 'data preview:', String(resp.data).substring(0, 200));
+      if (showFeedback) toast('Cloud data corrupt: ' + e.message);
       return;
     }
     if (!cloud || !cloud.tasks) {
