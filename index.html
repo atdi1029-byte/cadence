@@ -2856,7 +2856,7 @@ function _doCloudSave(ep, showFeedback) {
   function sendChunk(idx) {
     if (idx >= chunks.length) {
       // All chunks sent — assemble
-      jsonpFetch(ep + '?action=save_done&n=' + chunks.length, function(err2, resp2) {
+      jsonpFetch(ep + '?action=save_done&n=' + chunks.length + '&len=' + syncData.length, function(err2, resp2) {
         _saveInFlight = false;
         if (!err2 && resp2 && resp2.ok) {
           showSyncWarning(false);
@@ -3429,7 +3429,7 @@ function init() {
     }
     // Fire save_done after small delay to let chunks arrive
     setTimeout(function() {
-      fireGet(ep + '?action=save_done&n=' + chunks.length);
+      fireGet(ep + '?action=save_done&n=' + chunks.length + '&len=' + payload.length);
     }, 300);
   }
 
