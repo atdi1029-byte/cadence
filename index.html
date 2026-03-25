@@ -2048,6 +2048,7 @@ function saveTemplate(editId) {
       tmpl.items = items;
       tmpl.category = category;
       tmpl.autoDay = autoDay;
+      tmpl.updatedAt = Date.now();
     }
   } else {
     data.templates.push({
@@ -2058,7 +2059,8 @@ function saveTemplate(editId) {
       lastUsed: null,
       lastUsedDate: null,
       useCount: 0,
-      autoDay: autoDay
+      autoDay: autoDay,
+      updatedAt: Date.now()
     });
   }
   saveData();
@@ -3133,13 +3135,24 @@ function mergeFromCloud(showToast) {
       }
     }
 
-    // Also merge templates from cloud
+    // Merge templates from cloud: add new ones, update existing when cloud is newer
     if (cloud.templates) {
-      var localTemplateIds = new Set((data.templates || []).map(function(t) { return t.id; }));
+      if (!data.templates) data.templates = [];
+      var localTmplMap = {};
+      data.templates.forEach(function(t) { if (t.id) localTmplMap[t.id] = t; });
       for (var j = 0; j < cloud.templates.length; j++) {
-        if (cloud.templates[j].id && !localTemplateIds.has(cloud.templates[j].id)) {
-          if (!data.templates) data.templates = [];
-          data.templates.push(cloud.templates[j]);
+        var ct = cloud.templates[j];
+        if (!ct.id) continue;
+        if (localTmplMap[ct.id]) {
+          // Update existing template if cloud version is newer
+          var localU = localTmplMap[ct.id].updatedAt || 0;
+          var cloudU = ct.updatedAt || 0;
+          if (cloudU > localU) {
+            var idx = data.templates.indexOf(localTmplMap[ct.id]);
+            if (idx >= 0) data.templates[idx] = ct;
+          }
+        } else {
+          data.templates.push(ct);
         }
       }
     }
@@ -3382,6 +3395,8 @@ function init() {
         }
       }
       syncReady = true;
+      // Push local data to cloud — catches template edits made while syncReady was false
+      syncToCloud();
     });
   } else {
     syncReady = true;
@@ -3392,25 +3407,29 @@ function init() {
     navigator.serviceWorker.register('./service-worker.js', {updateViaCache: 'none'});
   }
 
-  // Beacon save — single atomic POST that survives page background/close
+  // fireGet — img-based GET that bypasses mobile CORS redirect issues with Apps Script
+  function fireGet(url) { var img = new Image(); img.src = url; }
+
+  // Beacon save — fire-and-forget GET chunks (POST fails on mobile due to CORS redirects)
   function beaconSave() {
     var ep = getSyncUrl();
     if (!ep || !syncReady) return;
     if (!data.tasks || data.tasks.length === 0) return;
     var payload = getSyncPayload();
-    var body = JSON.stringify({action: 'save', data: payload});
-    if (navigator.sendBeacon) {
-      var blob = new Blob([body], {type: 'text/plain'});
-      var sent = navigator.sendBeacon(ep, blob);
-      console.warn('[SYNC] sendBeacon: ' + sent +
-        ', ' + payload.length + ' chars');
-    } else {
-      // Fallback: fire-and-forget fetch
-      try {
-        fetch(ep, {method:'POST', body: body,
-          keepalive: true, mode: 'no-cors'});
-      } catch(e) {}
+    var CHUNK_SIZE = 1800;
+    var chunks = [];
+    for (var i = 0; i < payload.length; i += CHUNK_SIZE) {
+      chunks.push(payload.substring(i, i + CHUNK_SIZE));
     }
+    console.warn('[SYNC] beaconSave via fireGet: ' + chunks.length + ' chunks, ' + payload.length + ' chars');
+    // Fire all chunks via GET (img.src survives page hide better than POST)
+    for (var c = 0; c < chunks.length; c++) {
+      fireGet(ep + '?action=save_chunk&i=' + c + '&cd=' + encodeURIComponent(chunks[c]));
+    }
+    // Fire save_done after small delay to let chunks arrive
+    setTimeout(function() {
+      fireGet(ep + '?action=save_done&n=' + chunks.length);
+    }, 300);
   }
 
   // Rule 2: Auto-merge when switching back, beacon-save when leaving
