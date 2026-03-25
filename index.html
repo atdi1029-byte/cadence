@@ -2852,45 +2852,51 @@ function _doCloudSave(ep, showFeedback) {
 
   if (showFeedback) toast('Syncing ' + data.tasks.length + ' tasks...');
 
-  // Send chunks via fireGet (img.src) — immune to extension blocking
-  // Stagger by 150ms to preserve order on server
-  for (var c = 0; c < chunks.length; c++) {
-    (function(idx) {
-      setTimeout(function() {
-        fireGet(ep + '?action=save_chunk&i=' + idx + '&cd=' + encodeURIComponent(chunks[idx]));
-      }, idx * 150);
-    })(c);
-  }
-
-  // After all chunks sent + buffer, fire save_done then verify via JSONP
-  var assembleDelay = (chunks.length * 150) + 500;
-  setTimeout(function() {
-    fireGet(ep + '?action=save_done&n=' + chunks.length + '&len=' + syncData.length);
-    console.warn('[SYNC] fireGet save sent: ' + chunks.length + ' chunks');
-
-    // Verify via JSONP read-back after server has time to assemble
-    setTimeout(function() {
-      jsonpFetch(ep + '?action=load', function(ve, vr) {
-        _saveInFlight = false;
-        if (!ve && vr && vr.ok && vr.data) {
-          var vd; try { vd = typeof vr.data === 'string' ? JSON.parse(vr.data) : vr.data; } catch(x) { vd = null; }
-          if (vd && vd.tasks && vd.tasks.length > 0) {
-            showSyncWarning(false);
-            console.warn('[SYNC] SAVE VERIFIED — cloud has ' + vd.tasks.length + ' tasks');
-            if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
-          } else {
-            console.warn('[SYNC] VERIFY: cloud data empty/invalid');
-            showSyncWarning(true);
-          }
+  // Send chunks sequentially via JSONP — each confirmed before sending next
+  var chunkIdx = 0;
+  var retries = 0;
+  function sendNextChunk() {
+    if (chunkIdx >= chunks.length) {
+      // All chunks confirmed — assemble via JSONP
+      jsonpFetch(ep + '?action=save_done&n=' + chunks.length + '&len=' + syncData.length, function(err, resp) {
+        if (!err && resp && resp.ok && resp.saved) {
+          _saveInFlight = false;
+          showSyncWarning(false);
+          console.warn('[SYNC] SAVE CONFIRMED — ' + chunks.length + ' chunks, ' + syncData.length + ' chars');
+          if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
+          if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 1000); }
+        } else if (retries < 2) {
+          retries++;
+          console.warn('[SYNC] save_done failed, retry ' + retries);
+          setTimeout(sendNextChunk.bind(null), 500);
         } else {
-          // JSONP verify failed (extension blocked it) — data likely saved, don't panic
-          console.warn('[SYNC] VERIFY read-back failed (extension?), data likely saved');
-          // Don't show warning — fireGet is reliable, verification is just a bonus
+          _saveInFlight = false;
+          console.warn('[SYNC] save_done FAILED after retries:', err, resp);
+          showSyncWarning(true);
+          if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 2000); }
         }
-        if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 1000); }
       });
-    }, 3000);
-  }, assembleDelay);
+      return;
+    }
+    var url = ep + '?action=save_chunk&i=' + chunkIdx + '&cd=' + encodeURIComponent(chunks[chunkIdx]);
+    jsonpFetch(url, function(err, resp) {
+      if (!err && resp && resp.ok) {
+        chunkIdx++;
+        retries = 0;
+        sendNextChunk();
+      } else if (retries < 2) {
+        retries++;
+        console.warn('[SYNC] chunk ' + chunkIdx + ' failed, retry ' + retries);
+        setTimeout(sendNextChunk, 500);
+      } else {
+        _saveInFlight = false;
+        console.warn('[SYNC] chunk ' + chunkIdx + ' FAILED after retries');
+        showSyncWarning(true);
+        if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 2000); }
+      }
+    });
+  }
+  sendNextChunk();
 }
 
 // === DEBUG: run window.testSave() from console to test if JSONP writes actually persist ===
@@ -3398,10 +3404,11 @@ function init() {
   // fireGet — img-based GET that bypasses mobile CORS redirect issues with Apps Script
   function fireGet(url) { var img = new Image(); img.src = url; }
 
-  // Beacon save — fire-and-forget GET chunks (POST fails on mobile due to CORS redirects)
+  // Beacon save — fire-and-forget GET chunks (last resort for pagehide only)
   function beaconSave() {
     var ep = getSyncUrl();
     if (!ep || !syncReady) return;
+    if (_saveInFlight) return; // Don't conflict with JSONP save
     if (!data.tasks || data.tasks.length === 0) return;
     var payload = getSyncPayload();
     var CHUNK_SIZE = 1800;
@@ -3410,37 +3417,34 @@ function init() {
       chunks.push(payload.substring(i, i + CHUNK_SIZE));
     }
     console.warn('[SYNC] beaconSave via fireGet: ' + chunks.length + ' chunks, ' + payload.length + ' chars');
-    // Fire all chunks via GET (img.src survives page hide better than POST)
     for (var c = 0; c < chunks.length; c++) {
       fireGet(ep + '?action=save_chunk&i=' + c + '&cd=' + encodeURIComponent(chunks[c]));
     }
-    // Fire save_done after small delay to let chunks arrive
     setTimeout(function() {
       fireGet(ep + '?action=save_done&n=' + chunks.length + '&len=' + payload.length);
     }, 300);
   }
 
-  // Rule 2: Auto-merge when switching back, beacon-save when leaving
+  // Rule 2: Auto-merge when switching back, save when leaving
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible' && syncReady) {
       mergeFromCloud(false);
     } else if (document.visibilityState === 'hidden' && syncReady) {
-      // Cancel any pending debounce — we're saving NOW via beacon
       if (_syncDebounce) {
         clearTimeout(_syncDebounce);
         _syncDebounce = null;
       }
-      beaconSave();
+      // Use confirmed JSONP save (page stays alive when hidden)
+      var ep = getSyncUrl();
+      if (ep && data.tasks && data.tasks.length > 0) {
+        _doCloudSave(ep, false);
+      }
     }
   });
 
-  // Backup flush for app close / navigation
+  // Backup flush for app close / navigation (page being destroyed — use fireGet)
   document.addEventListener('pagehide', function() {
     if (!syncReady) return;
-    if (_syncDebounce) {
-      clearTimeout(_syncDebounce);
-      _syncDebounce = null;
-    }
     beaconSave();
   });
 
