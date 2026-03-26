@@ -1493,6 +1493,7 @@ function reorderTasks(newIdOrder) {
     if (!t.completedAt && !reordered.includes(t)) reordered.push(t);
   }
   data.tasks = [...reordered, ...completed];
+  data.orderUpdatedAt = Date.now();
   saveData();
   renderTasks();
 }
@@ -2829,6 +2830,7 @@ function getSyncPayload() {
     monthly: data.monthly || {},
     weekly: data.weekly || {},
     lastModified: data.lastModified || 0,
+    orderUpdatedAt: data.orderUpdatedAt || 0,
     deletedIds: delIds
   });
 }
@@ -3151,10 +3153,11 @@ function mergeFromCloud(showToast) {
       }
     }
 
-    // Adopt cloud order when cloud is newer (e.g. reordered on another device).
-    // Safe: if user just dragged locally, local lastModified is newer so this won't fire.
+    // Adopt cloud order when cloud has a newer reorder timestamp.
+    // Uses dedicated orderUpdatedAt (set only by drag-reorder) so edits/checks don't block it.
     var orderChanged = false;
-    if (cloudIsNewer) {
+    var cloudOrderNewer = (cloud.orderUpdatedAt || 0) > (data.orderUpdatedAt || 0);
+    if (cloudOrderNewer || cloudIsNewer) {
       var localTaskMap3 = {};
       data.tasks.forEach(function(t) { if (t.id) localTaskMap3[t.id] = t; });
       var reordered3 = [];
@@ -3169,7 +3172,10 @@ function mergeFromCloud(showToast) {
         for (var lo3 = 0; lo3 < localOnly3.length; lo3++) reordered3.push(localOnly3[lo3]);
       }
       orderChanged = JSON.stringify(reordered3.map(function(t){return t.id;})) !== JSON.stringify(data.tasks.map(function(t){return t.id;}));
-      if (orderChanged) data.tasks = reordered3;
+      if (orderChanged) {
+        data.tasks = reordered3;
+        if (cloudOrderNewer) data.orderUpdatedAt = cloud.orderUpdatedAt;
+      }
     }
 
     // Merge weekly data: cloud wins if it has newer/more items
@@ -3348,9 +3354,10 @@ function init() {
             merged++;
           }
         }
-        // Adopt cloud's task order ONLY if cloud is newer
+        // Adopt cloud's task order if cloud has newer reorder or newer lastModified
         var orderChanged2 = false;
-        if (cloudIsNewer) {
+        var cloudOrderNewer2 = (cloud.orderUpdatedAt || 0) > (data.orderUpdatedAt || 0);
+        if (cloudOrderNewer2 || cloudIsNewer) {
           var localTaskMap2 = {};
           data.tasks.forEach(function(t) { if (t.id) localTaskMap2[t.id] = t; });
           var reordered2 = [];
@@ -3370,7 +3377,10 @@ function init() {
             for (var lo2 = localOnly2.length - 1; lo2 >= 0; lo2--) reordered2.splice(insertAt2, 0, localOnly2[lo2]);
           }
           orderChanged2 = JSON.stringify(reordered2.map(function(t){return t.id;})) !== JSON.stringify(data.tasks.map(function(t){return t.id;}));
-          data.tasks = reordered2;
+          if (orderChanged2) {
+            data.tasks = reordered2;
+            if (cloudOrderNewer2) data.orderUpdatedAt = cloud.orderUpdatedAt;
+          }
         }
 
         if (merged > 0 || updated > 0 || orderChanged2) {
