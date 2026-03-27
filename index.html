@@ -2261,6 +2261,9 @@ function addWeeklyItem() {
 
 function deleteWeeklyItem(itemId) {
   data.weekly.items = data.weekly.items.filter(function(i) { return i.id !== itemId; });
+  if (!data.weekly.deletedIds) data.weekly.deletedIds = [];
+  if (data.weekly.deletedIds.indexOf(itemId) === -1) data.weekly.deletedIds.push(itemId);
+  data.weekly.deletedIds = data.weekly.deletedIds.slice(-50);
   saveData();
   renderWeekly();
   toast('Weekly goal removed');
@@ -3178,27 +3181,30 @@ function mergeFromCloud(showToast) {
       }
     }
 
-    // Merge weekly data: cloud wins if it has newer/more items
+    // Merge weekly data: respect deletedIds from both sides
     var weeklyChanged = false;
     if (cloud.weekly) {
       var localItems = (data.weekly && data.weekly.items) || [];
       var cloudItems = cloud.weekly.items || [];
       var localItemIds = new Set(localItems.map(function(i) { return i.id; }));
-      // Add any cloud items missing locally
+      // Merge deletedIds from both local and cloud
+      var localDeleted = (data.weekly && data.weekly.deletedIds) || [];
+      var cloudDeleted = cloud.weekly.deletedIds || [];
+      var allDeletedSet = new Set(localDeleted.concat(cloudDeleted));
+      // Add cloud items missing locally, but NOT if they were deleted
       for (var wi = 0; wi < cloudItems.length; wi++) {
-        if (!localItemIds.has(cloudItems[wi].id)) {
+        if (!localItemIds.has(cloudItems[wi].id) && !allDeletedSet.has(cloudItems[wi].id)) {
           localItems.push(cloudItems[wi]);
           weeklyChanged = true;
         }
       }
-      // If cloud has fewer items (deleted on other device) and cloud is newer, adopt cloud items
-      if (cloudIsNewer && cloudItems.length < localItems.length) {
-        var cloudItemIds = new Set(cloudItems.map(function(i) { return i.id; }));
-        localItems = localItems.filter(function(i) { return cloudItemIds.has(i.id); });
-        weeklyChanged = true;
-      }
+      // Remove any items that exist in the merged deletedIds
+      var beforeLen = localItems.length;
+      localItems = localItems.filter(function(i) { return !allDeletedSet.has(i.id); });
+      if (localItems.length !== beforeLen) weeklyChanged = true;
       if (!data.weekly) data.weekly = {items: [], log: {}};
       data.weekly.items = localItems;
+      data.weekly.deletedIds = Array.from(allDeletedSet).slice(-50);
       // Merge weekly logs: combine all weeks, always take higher count (counts only go up)
       if (cloud.weekly.log) {
         if (!data.weekly.log) data.weekly.log = {};
