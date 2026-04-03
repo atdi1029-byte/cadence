@@ -2375,6 +2375,9 @@ function addMonthlyItem() {
 
 function deleteMonthlyItem(itemId) {
   data.monthly.items = data.monthly.items.filter(i => i.id !== itemId);
+  if (!data.monthly.deletedIds) data.monthly.deletedIds = [];
+  data.monthly.deletedIds.push(itemId);
+  if (data.monthly.deletedIds.length > 50) data.monthly.deletedIds = data.monthly.deletedIds.slice(-50);
   saveData();
   renderMonthly();
   toast('Monthly item removed');
@@ -3002,10 +3005,26 @@ function syncToCloud() {
               }
             }
           }
-          // Restore cloud monthly if local is empty (e.g. after cache wipe)
-          if (cloud.monthly && cloud.monthly.items && cloud.monthly.items.length > 0) {
-            if (!data.monthly || !data.monthly.items || data.monthly.items.length === 0) {
-              data.monthly = cloud.monthly;
+          // Merge monthly from cloud: item-level merge (not full replacement)
+          if (cloud.monthly) {
+            if (!data.monthly) data.monthly = {items:[], done:{}};
+            var localMIds2 = new Set((data.monthly.items||[]).map(function(x){return x.id;}));
+            var allMDel2 = new Set((data.monthly.deletedIds||[]).concat(cloud.monthly.deletedIds||[]));
+            (cloud.monthly.items||[]).forEach(function(ci) {
+              if (!localMIds2.has(ci.id) && !allMDel2.has(ci.id)) data.monthly.items.push(ci);
+            });
+            data.monthly.items = data.monthly.items.filter(function(i) { return !allMDel2.has(i.id); });
+            data.monthly.deletedIds = Array.from(allMDel2).slice(-50);
+            // Merge done state: union per month key
+            if (cloud.monthly.done) {
+              if (!data.monthly.done) data.monthly.done = {};
+              for (var mdk2 in cloud.monthly.done) {
+                if (!data.monthly.done[mdk2]) { data.monthly.done[mdk2] = cloud.monthly.done[mdk2]; }
+                else {
+                  var ld2 = new Set(data.monthly.done[mdk2]);
+                  (cloud.monthly.done[mdk2]||[]).forEach(function(did) { if (!ld2.has(did)) data.monthly.done[mdk2].push(did); });
+                }
+              }
             }
           }
           // preserve user's manual order — new tasks append at end
@@ -3227,14 +3246,47 @@ function mergeFromCloud(showToast) {
       }
     }
 
-    // Merge monthly data: cloud wins if newer, OR if local is empty (cache wipe recovery)
+    // Merge monthly data: item-level merge (same approach as weekly)
     var monthlyChanged = false;
-    if (cloud.monthly && cloud.monthly.items && cloud.monthly.items.length > 0) {
-      var localMonthlyEmpty = !data.monthly || !data.monthly.items || data.monthly.items.length === 0;
-      if (localMonthlyEmpty || cloudIsNewer) {
-        if (JSON.stringify(data.monthly || {}) !== JSON.stringify(cloud.monthly)) {
-          data.monthly = cloud.monthly;
+    if (cloud.monthly) {
+      if (!data.monthly) data.monthly = {items:[], done:{}};
+      var localMItems = data.monthly.items || [];
+      var cloudMItems = cloud.monthly.items || [];
+      var localMIds = new Set(localMItems.map(function(i) { return i.id; }));
+      // Merge deletedIds from both sides
+      var localMDel = data.monthly.deletedIds || [];
+      var cloudMDel = cloud.monthly.deletedIds || [];
+      var allMDelSet = new Set(localMDel.concat(cloudMDel));
+      // Add cloud items missing locally, but NOT if deleted
+      for (var mi = 0; mi < cloudMItems.length; mi++) {
+        if (!localMIds.has(cloudMItems[mi].id) && !allMDelSet.has(cloudMItems[mi].id)) {
+          localMItems.push(cloudMItems[mi]);
           monthlyChanged = true;
+        }
+      }
+      // Remove items that exist in merged deletedIds
+      var beforeMLen = localMItems.length;
+      localMItems = localMItems.filter(function(i) { return !allMDelSet.has(i.id); });
+      if (localMItems.length !== beforeMLen) monthlyChanged = true;
+      data.monthly.items = localMItems;
+      data.monthly.deletedIds = Array.from(allMDelSet).slice(-50);
+      // Merge done state: union of done IDs per month key
+      if (cloud.monthly.done) {
+        if (!data.monthly.done) data.monthly.done = {};
+        for (var mdk in cloud.monthly.done) {
+          if (!data.monthly.done[mdk]) {
+            data.monthly.done[mdk] = cloud.monthly.done[mdk];
+            monthlyChanged = true;
+          } else {
+            var localDone = new Set(data.monthly.done[mdk]);
+            var cloudDoneArr = cloud.monthly.done[mdk] || [];
+            for (var di = 0; di < cloudDoneArr.length; di++) {
+              if (!localDone.has(cloudDoneArr[di])) {
+                data.monthly.done[mdk].push(cloudDoneArr[di]);
+                monthlyChanged = true;
+              }
+            }
+          }
         }
       }
     }
@@ -3389,17 +3441,43 @@ function init() {
           }
         }
 
-        if (merged > 0 || updated > 0 || orderChanged2) {
+        // Merge monthly from cloud on init (item-level merge)
+        var initMonthlyChanged = false;
+        if (cloud.monthly) {
+          if (!data.monthly) data.monthly = {items:[], done:{}};
+          var localMIds3 = new Set((data.monthly.items||[]).map(function(x){return x.id;}));
+          var allMDel3 = new Set((data.monthly.deletedIds||[]).concat(cloud.monthly.deletedIds||[]));
+          (cloud.monthly.items||[]).forEach(function(ci) {
+            if (!localMIds3.has(ci.id) && !allMDel3.has(ci.id)) { data.monthly.items.push(ci); initMonthlyChanged = true; }
+          });
+          var bfm = data.monthly.items.length;
+          data.monthly.items = data.monthly.items.filter(function(i) { return !allMDel3.has(i.id); });
+          if (data.monthly.items.length !== bfm) initMonthlyChanged = true;
+          data.monthly.deletedIds = Array.from(allMDel3).slice(-50);
+          if (cloud.monthly.done) {
+            if (!data.monthly.done) data.monthly.done = {};
+            for (var mdk3 in cloud.monthly.done) {
+              if (!data.monthly.done[mdk3]) { data.monthly.done[mdk3] = cloud.monthly.done[mdk3]; initMonthlyChanged = true; }
+              else {
+                var ld3 = new Set(data.monthly.done[mdk3]);
+                (cloud.monthly.done[mdk3]||[]).forEach(function(did) { if (!ld3.has(did)) { data.monthly.done[mdk3].push(did); initMonthlyChanged = true; } });
+              }
+            }
+          }
+        }
+
+        if (merged > 0 || updated > 0 || orderChanged2 || initMonthlyChanged) {
           data.lastModified = Date.now();
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
           renderTasks();
           renderSuggestions();
           renderTemplateSuggestions();
+          if (initMonthlyChanged) renderMonthly();
           var msg = '';
           if (merged > 0) msg += '+' + merged + ' new';
           if (updated > 0) msg += (msg ? ', ' : '') + updated + ' updated';
           if (orderChanged2 && !merged && !updated) msg = 'order synced';
-          toast('Synced: ' + msg);
+          if (msg) toast('Synced: ' + msg);
         } else {
           toast('In sync (' + data.tasks.length + ' tasks)');
         }
