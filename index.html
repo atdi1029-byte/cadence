@@ -337,16 +337,41 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 .monthly-item.m-done .monthly-item-text{text-decoration:line-through;opacity:.5}
 .monthly-item-del{color:var(--text-dim);font-size:.9rem;cursor:pointer;padding:4px 6px;opacity:.5;transition:opacity .2s}
 .monthly-item-del:active{opacity:1}
-.monthly-add{display:flex;gap:6px;align-items:center}
+.monthly-add{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .monthly-input{
-  flex:1;padding:8px 12px;border-radius:var(--radius-sm);
+  flex:1;min-width:100px;padding:8px 12px;border-radius:var(--radius-sm);
   background:var(--input-bg);border:1px solid var(--card-border);
   color:var(--text-bright);font-size:.82rem;
+}
+.monthly-add-target{
+  width:50px;padding:8px;border-radius:var(--radius-sm);text-align:center;
+  background:var(--input-bg);border:1px solid var(--card-border);
+  color:var(--text-bright);font-size:.82rem;display:none;
+}
+.monthly-add-unit{
+  padding:8px 10px;border-radius:var(--radius-sm);
+  background:var(--input-bg);border:1px solid var(--card-border);
+  color:var(--accent);font-size:.78rem;font-weight:600;cursor:pointer;
 }
 .monthly-add-btn{
   width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;
   font-size:1.1rem;font-weight:700;display:flex;align-items:center;justify-content:center;
 }
+.monthly-time-item{
+  display:flex;flex-direction:column;gap:4px;padding:8px 0;
+  border-bottom:1px solid var(--card-border);
+}
+.monthly-time-item:last-child{border-bottom:none}
+.monthly-time-top{display:flex;align-items:center;gap:10px;cursor:pointer}
+.monthly-time-text{font-size:.85rem;color:var(--text-bright);font-weight:500;flex:1}
+.monthly-time-count{font-size:.75rem;font-weight:600;color:var(--accent)}
+.monthly-time-item.m-done .monthly-time-count{color:var(--green)}
+.monthly-time-item.m-done .monthly-time-text{color:var(--green);opacity:.8}
+.monthly-time-bar{height:4px;border-radius:2px;background:var(--card-border);overflow:hidden}
+.monthly-time-bar-fill{height:100%;border-radius:2px;background:var(--accent);transition:width .3s}
+.monthly-time-item.m-done .monthly-time-bar-fill{background:var(--green)}
+.monthly-time-del{color:var(--text-dim);font-size:.9rem;cursor:pointer;padding:4px 6px;opacity:.5;transition:opacity .2s}
+.monthly-time-del:active{opacity:1}
 .monthly-subitem{
   display:flex;align-items:center;gap:8px;padding:5px 0 5px 28px;
   border-bottom:1px solid rgba(255,255,255,0.03);
@@ -760,6 +785,8 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
         <div class="monthly-items" id="monthlyItems"></div>
         <div class="monthly-add">
           <input type="text" id="monthlyInput" placeholder="Add monthly item..." class="monthly-input" onkeydown="if(event.key==='Enter')addMonthlyItem()">
+          <input type="number" id="monthlyTargetInput" placeholder="#" class="monthly-add-target" min="1" value="1">
+          <button class="monthly-add-unit" id="monthlyUnitBtn" onclick="toggleMonthlyUnit()">check</button>
           <button class="monthly-add-btn" onclick="addMonthlyItem()">+</button>
         </div>
       </div>
@@ -836,7 +863,7 @@ function loadData() {
     if (!data.history) data.history = [];
     if (!data.freq) data.freq = {};
     if (!data.templates) data.templates = [];
-    if (!data.monthly) data.monthly = {items:[], done:{}};
+    if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
     if (!data.weekly) data.weekly = {items:[], log:{}};
     if (!data.settings) data.settings = {};
   } catch(e) {
@@ -845,7 +872,7 @@ function loadData() {
       history: [],
       freq: {},
       templates: [],
-      monthly: {items:[], done:{}},
+      monthly: {items:[], done:{}, log:{}},
       weekly: {items:[], log:{}},
       settings: {
         name: '',
@@ -2366,11 +2393,65 @@ function addMonthlyItem() {
   const text = input.value.trim();
   if (!text) return;
   const id = 'm' + Date.now();
-  data.monthly.items.push({id: id, text: text});
+  const unitBtn = document.getElementById('monthlyUnitBtn');
+  const unit = unitBtn.textContent;
+  if (unit === 'hrs') {
+    const targetInput = document.getElementById('monthlyTargetInput');
+    const target = parseInt(targetInput.value) || 1;
+    data.monthly.items.push({id: id, text: text, target: target, unit: 'hrs'});
+    targetInput.value = '1';
+  } else {
+    data.monthly.items.push({id: id, text: text});
+  }
   saveData();
   input.value = '';
   renderMonthly();
   toast('Monthly item added');
+}
+
+function toggleMonthlyUnit() {
+  const btn = document.getElementById('monthlyUnitBtn');
+  const targetInput = document.getElementById('monthlyTargetInput');
+  if (btn.textContent === 'check') {
+    btn.textContent = 'hrs';
+    targetInput.style.display = '';
+  } else {
+    btn.textContent = 'check';
+    targetInput.style.display = 'none';
+  }
+}
+
+function getMonthlyTimeVal(itemId) {
+  const mk = getMonthKey();
+  return (data.monthly.log[mk] && data.monthly.log[mk][itemId]) || 0;
+}
+
+function logMonthlyProgress(itemId) {
+  const item = data.monthly.items.find(function(i) { return i.id === itemId; });
+  if (!item) return;
+  const mk = getMonthKey();
+  if (!data.monthly.log[mk]) data.monthly.log[mk] = {};
+  const current = data.monthly.log[mk][itemId] || 0;
+  var ch = Math.floor(current / 60), cm = Math.round(current % 60);
+  var currentLabel = (ch ? ch + 'h ' : '') + cm + 'm';
+  const input = prompt('Add minutes for ' + item.text + '\n(current: ' + currentLabel + ' / ' + item.target + 'h)\n\nEnter minutes, e.g. 30 or 1.5h:');
+  if (input === null) return;
+  var val;
+  var trimmed = input.trim().toLowerCase();
+  if (trimmed.endsWith('h')) {
+    val = Math.round(parseFloat(trimmed) * 60);
+  } else {
+    val = Math.round(parseFloat(trimmed));
+  }
+  if (isNaN(val) || val <= 0) return;
+  data.monthly.log[mk][itemId] = current + val;
+  // Clean old months (keep last 3)
+  const keys = Object.keys(data.monthly.log).sort();
+  while (keys.length > 3) { delete data.monthly.log[keys.shift()]; }
+  saveData();
+  renderMonthly();
+  const targetMins = item.target * 60;
+  if (data.monthly.log[mk][itemId] >= targetMins) toast(item.text + ' goal met!');
 }
 
 function deleteMonthlyItem(itemId) {
@@ -2404,6 +2485,10 @@ function renderMonthly() {
     if (i.subtasks && i.subtasks.length > 0) {
       totalCount += i.subtasks.length;
       doneCount += i.subtasks.filter(s => isMonthlyDone(s.id)).length;
+    } else if (i.unit === 'hrs') {
+      totalCount++;
+      const val = getMonthlyTimeVal(i.id);
+      if (val >= i.target * 60) doneCount++;
     } else {
       totalCount++;
       if (isMonthlyDone(i.id)) doneCount++;
@@ -2433,6 +2518,22 @@ function renderMonthly() {
     return;
   }
   el.innerHTML = items.map(i => {
+    if (i.unit === 'hrs') {
+      const val = getMonthlyTimeVal(i.id);
+      const targetMins = i.target * 60;
+      const pct = Math.min(100, Math.round((val / targetMins) * 100));
+      const done = val >= targetMins;
+      var h = Math.floor(val / 60), m = Math.round(val % 60);
+      var label = (h ? h + 'h ' : '') + m + 'm / ' + i.target + 'h';
+      return `<div class="monthly-time-item${done ? ' m-done' : ''}">
+        <div class="monthly-time-top" onclick="logMonthlyProgress('${i.id}')">
+          <span class="monthly-time-text">${esc(titleCase(i.text))}</span>
+          <span class="monthly-time-count">${label}</span>
+          <div class="monthly-time-del" onclick="event.stopPropagation();deleteMonthlyItem('${i.id}')">\u00D7</div>
+        </div>
+        <div class="monthly-time-bar"><div class="monthly-time-bar-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }
     const done = isMonthlyDone(i.id);
     let html = `<div class="monthly-item${done ? ' m-done' : ''}">
       <div class="monthly-check" onclick="toggleMonthlyItem('${i.id}')">${done ? '\u2713' : ''}</div>
@@ -3007,7 +3108,7 @@ function syncToCloud() {
           }
           // Merge monthly from cloud: item-level merge (not full replacement)
           if (cloud.monthly) {
-            if (!data.monthly) data.monthly = {items:[], done:{}};
+            if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
             var localMIds2 = new Set((data.monthly.items||[]).map(function(x){return x.id;}));
             var allMDel2 = new Set((data.monthly.deletedIds||[]).concat(cloud.monthly.deletedIds||[]));
             (cloud.monthly.items||[]).forEach(function(ci) {
@@ -3023,6 +3124,20 @@ function syncToCloud() {
                 else {
                   var ld2 = new Set(data.monthly.done[mdk2]);
                   (cloud.monthly.done[mdk2]||[]).forEach(function(did) { if (!ld2.has(did)) data.monthly.done[mdk2].push(did); });
+                }
+              }
+            }
+            // Merge monthly log: take higher value (like weekly log)
+            if (cloud.monthly.log) {
+              if (!data.monthly.log) data.monthly.log = {};
+              for (var mlk2 in cloud.monthly.log) {
+                if (!data.monthly.log[mlk2]) { data.monthly.log[mlk2] = cloud.monthly.log[mlk2]; }
+                else {
+                  for (var mlid2 in cloud.monthly.log[mlk2]) {
+                    if ((cloud.monthly.log[mlk2][mlid2] || 0) > (data.monthly.log[mlk2][mlid2] || 0)) {
+                      data.monthly.log[mlk2][mlid2] = cloud.monthly.log[mlk2][mlid2];
+                    }
+                  }
                 }
               }
             }
@@ -3068,7 +3183,7 @@ function loadFromCloud(showFeedback) {
     data.history = localHistory;
     data.freq = localFreq;
     if (!data.templates) data.templates = [];
-    if (!data.monthly) data.monthly = {items:[], done:{}};
+    if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
     if (!data.weekly) data.weekly = {items:[], log:{}};
     data.lastModified = Date.now();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -3249,7 +3364,7 @@ function mergeFromCloud(showToast) {
     // Merge monthly data: item-level merge (same approach as weekly)
     var monthlyChanged = false;
     if (cloud.monthly) {
-      if (!data.monthly) data.monthly = {items:[], done:{}};
+      if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
       var localMItems = data.monthly.items || [];
       var cloudMItems = cloud.monthly.items || [];
       var localMIds = new Set(localMItems.map(function(i) { return i.id; }));
@@ -3283,6 +3398,26 @@ function mergeFromCloud(showToast) {
             for (var di = 0; di < cloudDoneArr.length; di++) {
               if (!localDone.has(cloudDoneArr[di])) {
                 data.monthly.done[mdk].push(cloudDoneArr[di]);
+                monthlyChanged = true;
+              }
+            }
+          }
+        }
+      }
+      // Merge monthly log: take higher value (like weekly log)
+      if (cloud.monthly.log) {
+        if (!data.monthly.log) data.monthly.log = {};
+        var cloudMLog = cloud.monthly.log;
+        for (var mlk in cloudMLog) {
+          if (!data.monthly.log[mlk]) {
+            data.monthly.log[mlk] = cloudMLog[mlk];
+            monthlyChanged = true;
+          } else {
+            for (var mlid in cloudMLog[mlk]) {
+              var cloudMVal = cloudMLog[mlk][mlid] || 0;
+              var localMVal = data.monthly.log[mlk][mlid] || 0;
+              if (cloudMVal > localMVal) {
+                data.monthly.log[mlk][mlid] = cloudMVal;
                 monthlyChanged = true;
               }
             }
@@ -3373,7 +3508,7 @@ function init() {
         data.history = localHistory;
         data.freq = localFreq;
         if (!data.templates) data.templates = [];
-        if (!data.monthly) data.monthly = {items:[], done:{}};
+        if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
         if (!data.weekly) data.weekly = {items:[], log:{}};
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         renderTasks();
@@ -3444,7 +3579,7 @@ function init() {
         // Merge monthly from cloud on init (item-level merge)
         var initMonthlyChanged = false;
         if (cloud.monthly) {
-          if (!data.monthly) data.monthly = {items:[], done:{}};
+          if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
           var localMIds3 = new Set((data.monthly.items||[]).map(function(x){return x.id;}));
           var allMDel3 = new Set((data.monthly.deletedIds||[]).concat(cloud.monthly.deletedIds||[]));
           (cloud.monthly.items||[]).forEach(function(ci) {
@@ -3461,6 +3596,20 @@ function init() {
               else {
                 var ld3 = new Set(data.monthly.done[mdk3]);
                 (cloud.monthly.done[mdk3]||[]).forEach(function(did) { if (!ld3.has(did)) { data.monthly.done[mdk3].push(did); initMonthlyChanged = true; } });
+              }
+            }
+          }
+          // Merge monthly log on init: take higher value
+          if (cloud.monthly.log) {
+            if (!data.monthly.log) data.monthly.log = {};
+            for (var mlk3 in cloud.monthly.log) {
+              if (!data.monthly.log[mlk3]) { data.monthly.log[mlk3] = cloud.monthly.log[mlk3]; initMonthlyChanged = true; }
+              else {
+                for (var mlid3 in cloud.monthly.log[mlk3]) {
+                  if ((cloud.monthly.log[mlk3][mlid3] || 0) > (data.monthly.log[mlk3][mlid3] || 0)) {
+                    data.monthly.log[mlk3][mlid3] = cloud.monthly.log[mlk3][mlid3]; initMonthlyChanged = true;
+                  }
+                }
               }
             }
           }
