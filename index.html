@@ -785,7 +785,7 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
         <div class="monthly-items" id="monthlyItems"></div>
         <div class="monthly-add">
           <input type="text" id="monthlyInput" placeholder="Add monthly item..." class="monthly-input" onkeydown="if(event.key==='Enter')addMonthlyItem()">
-          <input type="number" id="monthlyTargetInput" placeholder="#" class="monthly-add-target" min="1" value="1">
+          <input type="text" id="monthlyTargetInput" placeholder="1h30m" class="monthly-add-target" value="">
           <button class="monthly-add-unit" id="monthlyUnitBtn" onclick="toggleMonthlyUnit()">check</button>
           <button class="monthly-add-btn" onclick="addMonthlyItem()">+</button>
         </div>
@@ -2397,9 +2397,9 @@ function addMonthlyItem() {
   const unit = unitBtn.textContent;
   if (unit === 'hrs') {
     const targetInput = document.getElementById('monthlyTargetInput');
-    const target = parseInt(targetInput.value) || 1;
-    data.monthly.items.push({id: id, text: text, target: target, unit: 'hrs'});
-    targetInput.value = '1';
+    const targetMins = parseTimeInput(targetInput.value.trim()) || 60;
+    data.monthly.items.push({id: id, text: text, targetMins: targetMins, unit: 'hrs'});
+    targetInput.value = '';
   } else {
     data.monthly.items.push({id: id, text: text});
   }
@@ -2407,6 +2407,29 @@ function addMonthlyItem() {
   input.value = '';
   renderMonthly();
   toast('Monthly item added');
+}
+
+// Parse time input like "1h30m", "90", "1.5h", "2h", "45m" → minutes
+function parseTimeInput(str) {
+  if (!str) return 0;
+  str = str.trim().toLowerCase();
+  var hMatch = str.match(/(\d+\.?\d*)\s*h/);
+  var mMatch = str.match(/(\d+)\s*m/);
+  var mins = 0;
+  if (hMatch) mins += Math.round(parseFloat(hMatch[1]) * 60);
+  if (mMatch) mins += parseInt(mMatch[1]);
+  if (!hMatch && !mMatch) {
+    var n = parseFloat(str);
+    if (!isNaN(n)) mins = Math.round(n * 60);
+  }
+  return mins;
+}
+
+function fmtMins(mins) {
+  var h = Math.floor(mins / 60), m = Math.round(mins % 60);
+  if (h && m) return h + 'h' + m + 'm';
+  if (h) return h + 'h';
+  return m + 'm';
 }
 
 function toggleMonthlyUnit() {
@@ -2431,10 +2454,9 @@ function logMonthlyProgress(itemId) {
   if (!item) return;
   const mk = getMonthKey();
   if (!data.monthly.log[mk]) data.monthly.log[mk] = {};
+  const targetMins = item.targetMins || (item.target ? item.target * 60 : 60);
   const current = data.monthly.log[mk][itemId] || 0;
-  var ch = Math.floor(current / 60), cm = Math.round(current % 60);
-  var currentLabel = (ch ? ch + 'h ' : '') + cm + 'm';
-  const input = prompt('Add minutes for ' + item.text + '\n(current: ' + currentLabel + ' / ' + item.target + 'h)\n\nEnter minutes, e.g. 30 or 1.5h:');
+  const input = prompt('Add minutes for ' + item.text + '\n(current: ' + fmtMins(current) + ' / ' + fmtMins(targetMins) + ')\n\nEnter minutes, e.g. 30 or 1.5h:');
   if (input === null) return;
   var val;
   var trimmed = input.trim().toLowerCase();
@@ -2450,7 +2472,6 @@ function logMonthlyProgress(itemId) {
   while (keys.length > 3) { delete data.monthly.log[keys.shift()]; }
   saveData();
   renderMonthly();
-  const targetMins = item.target * 60;
   if (data.monthly.log[mk][itemId] >= targetMins) toast(item.text + ' goal met!');
 }
 
@@ -2488,7 +2509,8 @@ function renderMonthly() {
     } else if (i.unit === 'hrs') {
       totalCount++;
       const val = getMonthlyTimeVal(i.id);
-      if (val >= i.target * 60) doneCount++;
+      const tm = i.targetMins || (i.target ? i.target * 60 : 60);
+      if (val >= tm) doneCount++;
     } else {
       totalCount++;
       if (isMonthlyDone(i.id)) doneCount++;
@@ -2520,11 +2542,10 @@ function renderMonthly() {
   el.innerHTML = items.map(i => {
     if (i.unit === 'hrs') {
       const val = getMonthlyTimeVal(i.id);
-      const targetMins = i.target * 60;
+      const targetMins = i.targetMins || (i.target ? i.target * 60 : 60);
       const pct = Math.min(100, Math.round((val / targetMins) * 100));
       const done = val >= targetMins;
-      var h = Math.floor(val / 60), m = Math.round(val % 60);
-      var label = (h ? h + 'h ' : '') + m + 'm / ' + i.target + 'h';
+      var label = fmtMins(val) + ' / ' + fmtMins(targetMins);
       return `<div class="monthly-time-item${done ? ' m-done' : ''}">
         <div class="monthly-time-top" onclick="logMonthlyProgress('${i.id}')">
           <span class="monthly-time-text">${esc(titleCase(i.text))}</span>
