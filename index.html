@@ -282,6 +282,18 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
 .weekly-item.w-done .weekly-bar-fill{background:var(--green)}
 .weekly-item-del{color:var(--text-dim);font-size:.9rem;cursor:pointer;padding:4px 6px;opacity:.5;transition:opacity .2s}
 .weekly-item-del:active{opacity:1}
+.weekly-pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.weekly-pill{
+  padding:5px 12px;border-radius:18px;font-size:.78rem;font-weight:500;
+  background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--text-bright);cursor:pointer;transition:all .2s;
+  user-select:none;-webkit-user-select:none;
+}
+.weekly-pill:active{transform:scale(.94)}
+.weekly-pill.wp-done{
+  opacity:.45;text-decoration:line-through;
+  border-color:var(--green);background:var(--green-bg);color:var(--green);
+}
 .weekly-add{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .weekly-add-name{
   flex:1;min-width:100px;padding:8px 12px;border-radius:var(--radius-sm);
@@ -2193,7 +2205,9 @@ function getWeekLabel() {
 
 function getWeeklyVal(itemId) {
   const wk = getWeekKey();
-  return (data.weekly.log[wk] && data.weekly.log[wk][itemId]) || 0;
+  var v = data.weekly.log[wk] && data.weekly.log[wk][itemId];
+  if (Array.isArray(v)) return v.filter(Boolean).length;
+  return v || 0;
 }
 
 function renderWeekly() {
@@ -2222,10 +2236,42 @@ function renderWeekly() {
     return;
   }
   el.innerHTML = items.map(function(i) {
+    // Auto-detect legacy pill groups (have / in text but no isPillGroup flag)
+    var isPill = i.isPillGroup;
+    var pills = i.pills;
+    if (!isPill && i.text.includes('/')) {
+      var parts = i.text.split('/').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
+      if (parts.length >= 2) { isPill = true; pills = parts; i.isPillGroup = true; i.pills = parts; i.target = parts.length; i.unit = 'times'; saveData(); }
+    }
     const val = getWeeklyVal(i.id);
     var targetMins = i.unit === 'hrs' ? i.target * 60 : i.target;
     const pct = Math.min(100, Math.round((val / targetMins) * 100));
     const done = val >= targetMins;
+
+    if (isPill && pills) {
+      // Render as pill group
+      const wk = getWeekKey();
+      var pillStates = (data.weekly.log[wk] && data.weekly.log[wk][i.id]);
+      if (!Array.isArray(pillStates)) pillStates = pills.map(function() { return false; });
+      var doneCount = pillStates.filter(Boolean).length;
+      var allDone = doneCount >= pills.length;
+      var pillsHTML = pills.map(function(p, pi) {
+        return '<span class="weekly-pill' + (pillStates[pi] ? ' wp-done' : '') +
+          '" onclick="event.stopPropagation();toggleWeeklyPill(\'' + i.id + '\',' + pi + ')">' +
+          esc(titleCase(p)) + '</span>';
+      }).join('');
+      return '<div class="weekly-item' + (allDone ? ' w-done' : '') + '">' +
+        '<div class="weekly-item-info">' +
+          '<div class="weekly-item-top">' +
+            '<span class="weekly-item-count">' + doneCount + '/' + pills.length + '</span>' +
+          '</div>' +
+          '<div class="weekly-pills">' + pillsHTML + '</div>' +
+          '<div class="weekly-bar"><div class="weekly-bar-fill" style="width:' + Math.round((doneCount / pills.length) * 100) + '%"></div></div>' +
+        '</div>' +
+        '<div class="weekly-item-del" onclick="deleteWeeklyItem(\'' + i.id + '\')">\u00D7</div>' +
+      '</div>';
+    }
+
     var label;
     if (i.unit === 'hrs') {
       var h = Math.floor(val / 60), m = Math.round(val % 60);
@@ -2287,9 +2333,22 @@ function addWeeklyItem() {
   const unitBtn = document.getElementById('weeklyUnitBtn');
   const text = nameInput.value.trim();
   if (!text) return;
-  const target = parseInt(targetInput.value) || 1;
   const unit = unitBtn.textContent;
   const id = 'w' + Date.now();
+  // Detect pill groups: "email / send / pipeline"
+  if (text.includes('/')) {
+    const pills = text.split('/').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
+    if (pills.length >= 2) {
+      data.weekly.items.push({id: id, text: text, target: pills.length, unit: 'times', isPillGroup: true, pills: pills});
+      saveData();
+      nameInput.value = '';
+      targetInput.value = '1';
+      renderWeekly();
+      toast('Weekly pill group added');
+      return;
+    }
+  }
+  const target = parseInt(targetInput.value) || 1;
   data.weekly.items.push({id: id, text: text, target: target, unit: unit});
   saveData();
   nameInput.value = '';
@@ -2319,6 +2378,21 @@ function toggleWeeklyOpen() {
   body.classList.toggle('collapsed');
   chev.classList.toggle('collapsed');
   localStorage.setItem('cadence_weekly_collapsed', body.classList.contains('collapsed') ? '1' : '');
+}
+
+function toggleWeeklyPill(itemId, pillIndex) {
+  const item = data.weekly.items.find(function(i) { return i.id === itemId; });
+  if (!item || !item.pills) return;
+  const wk = getWeekKey();
+  if (!data.weekly.log[wk]) data.weekly.log[wk] = {};
+  var states = data.weekly.log[wk][itemId];
+  if (!Array.isArray(states)) states = item.pills.map(function() { return false; });
+  states[pillIndex] = !states[pillIndex];
+  data.weekly.log[wk][itemId] = states;
+  saveData();
+  renderWeekly();
+  var doneCount = states.filter(Boolean).length;
+  if (doneCount === item.pills.length) toast('All done!');
 }
 
 // ===== MONTHLY TO-DO =====
