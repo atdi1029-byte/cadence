@@ -1966,7 +1966,19 @@ function renderRoutines() {
     return;
   }
   empty.style.display = 'none';
-  el.innerHTML = data.templates.map(t => {
+  const today = new Date().getDay();
+  const sorted = [...data.templates].sort((a, b) => {
+    const aDay = a.autoDay, bDay = b.autoDay;
+    const aIsSpecial = aDay === null || aDay === undefined || aDay >= 7;
+    const bIsSpecial = bDay === null || bDay === undefined || bDay >= 7;
+    if (aIsSpecial && bIsSpecial) return 0;
+    if (aIsSpecial) return 1;
+    if (bIsSpecial) return -1;
+    const aDist = (aDay - today + 7) % 7;
+    const bDist = (bDay - today + 7) % 7;
+    return aDist - bDist;
+  });
+  el.innerHTML = sorted.map(t => {
     const dayLabel = getAutoDayLabel(t.autoDay);
     const preview = t.items.slice(0, 3).join(', ') + (t.items.length > 3 ? '...' : '');
     return `<div class="tmpl-card" onclick="openTemplateDetail('${t.id}')">
