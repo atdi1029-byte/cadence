@@ -2167,6 +2167,17 @@ function loadTemplate(id) {
     // Don't add duplicates
     const exists = data.tasks.some(t => !t.completedAt && t.text.toLowerCase() === item.toLowerCase());
     if (!exists) {
+      // Check for pill groups (items with "/")
+      if (item.includes('/')) {
+        const parts = item.split('/').map(s => s.trim()).filter(s => s);
+        if (parts.length >= 2) {
+          const task = addTask(item, tmpl.category, {fromTemplate: tmpl.id});
+          task.subtasks = parts.map(p => ({text: p, done: false}));
+          task.isPillGroup = true;
+          added++;
+          return;
+        }
+      }
       addTask(item, tmpl.category, {fromTemplate: tmpl.id});
       added++;
     }
