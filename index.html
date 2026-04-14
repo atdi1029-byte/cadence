@@ -3048,16 +3048,35 @@ function getSyncPayload() {
   var syncTasks = active.concat(completed);
   // Cap deletedIds at most recent 50
   var delIds = (data.deletedIds || []).slice(-50);
-  return JSON.stringify({
+  // Include history + freq so cloud can fully restore after cache wipe
+  var hist = (data.history || []).slice(-300);
+  var freq = data.freq || {};
+  var payload = {
     tasks: syncTasks,
     templates: data.templates || [],
     settings: data.settings || {},
     monthly: data.monthly || {},
     weekly: data.weekly || {},
+    history: hist,
+    freq: freq,
     lastModified: data.lastModified || 0,
     orderUpdatedAt: data.orderUpdatedAt || 0,
     deletedIds: delIds
-  });
+  };
+  var json = JSON.stringify(payload);
+  // If payload exceeds 48K (Sheets cell limit ~50K), trim history to fit
+  while (json.length > 48000 && hist.length > 20) {
+    hist = hist.slice(Math.floor(hist.length / 2));
+    payload.history = hist;
+    json = JSON.stringify(payload);
+  }
+  if (json.length > 48000) {
+    payload.history = [];
+    payload.freq = {};
+    json = JSON.stringify(payload);
+    console.warn('[SYNC] Payload too large even without history/freq: ' + json.length);
+  }
+  return json;
 }
 
 // JSONP chunked save — splits data into GET requests (bypasses POST blocks on desktop)
@@ -3260,15 +3279,56 @@ function syncToCloud() {
               }
             }
           }
+          // Merge history + freq from cloud
+          mergeHistoryFreqFromCloud(cloud);
           // preserve user's manual order — new tasks append at end
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         }
+      }
+      // Safety guard: don't push if we'd overwrite cloud with far fewer tasks
+      var cloudTaskCount = (cloud && cloud.tasks) ? cloud.tasks.length : 0;
+      var localTaskCount = (data.tasks || []).filter(function(t) { return !t.completedAt; }).length;
+      if (cloudTaskCount > 5 && localTaskCount < cloudTaskCount * 0.3) {
+        console.warn('[SYNC] BLOCKED PUSH — local has ' + localTaskCount + ' active tasks but cloud has ' + cloudTaskCount + ' total. Possible data loss.');
+        showSyncWarning(true);
+        return;
       }
       // Push merged data to cloud
       console.warn('[SYNC] Cloud pull done, pushing merged data...');
       _doCloudSave(ep, false);
     });
   }, 1500);
+}
+
+// Merge history + freq from cloud into local (used by all restore/merge paths)
+function mergeHistoryFreqFromCloud(cloud) {
+  // History: merge by dedup on text+completedAt
+  if (cloud.history && cloud.history.length > 0) {
+    if (!data.history) data.history = [];
+    var existingKeys = new Set(data.history.map(function(h) {
+      return (h.text || '') + '|' + (h.completedAt || '');
+    }));
+    cloud.history.forEach(function(h) {
+      var key = (h.text || '') + '|' + (h.completedAt || '');
+      if (!existingKeys.has(key)) data.history.push(h);
+    });
+    // Sort by completedAt and cap at 500
+    data.history.sort(function(a, b) {
+      return (a.completedAt || '').localeCompare(b.completedAt || '');
+    });
+    if (data.history.length > 500) data.history = data.history.slice(-500);
+  }
+  // Freq: merge, take higher count per key
+  if (cloud.freq) {
+    if (!data.freq) data.freq = {};
+    for (var fk in cloud.freq) {
+      if (!data.freq[fk]) {
+        data.freq[fk] = cloud.freq[fk];
+      } else if ((cloud.freq[fk].count || 0) > (data.freq[fk].count || 0)) {
+        data.freq[fk] = cloud.freq[fk];
+      }
+    }
+  }
 }
 
 // Full restore from cloud — replaces local with cloud data
@@ -3294,12 +3354,22 @@ function loadFromCloud(showFeedback) {
       if (showFeedback) toast('Cloud is empty');
       return;
     }
-    // Keep local history/freq, replace everything else
+    // Keep local history/freq if we have them, otherwise use cloud's
     var localHistory = data.history || [];
     var localFreq = data.freq || {};
     data = cloud;
-    data.history = localHistory;
-    data.freq = localFreq;
+    if (localHistory.length > 0) {
+      data.history = localHistory;
+      mergeHistoryFreqFromCloud(cloud);
+    } else {
+      data.history = cloud.history || [];
+    }
+    if (Object.keys(localFreq).length > 0) {
+      data.freq = localFreq;
+      mergeHistoryFreqFromCloud(cloud);
+    } else {
+      data.freq = cloud.freq || {};
+    }
     if (!data.templates) data.templates = [];
     if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
     if (!data.weekly) data.weekly = {items:[], log:{}};
@@ -3544,6 +3614,9 @@ function mergeFromCloud(showToast) {
       }
     }
 
+    // Merge history + freq from cloud
+    mergeHistoryFreqFromCloud(cloud);
+
     if (merged > 0 || updated > 0 || data.tasks.length !== beforeCount || orderChanged || weeklyChanged || monthlyChanged) {
       data.lastModified = Date.now();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -3619,12 +3692,23 @@ function init() {
         return;
       }
       if (localEmpty) {
-        // Full restore — local is empty
+        // Full restore — local is empty (cache was likely wiped)
         var localHistory = data.history || [];
         var localFreq = data.freq || {};
         data = cloud;
-        data.history = localHistory;
-        data.freq = localFreq;
+        // Use cloud history/freq if local is empty (cache wipe recovery)
+        if (localHistory.length > 0) {
+          data.history = localHistory;
+          mergeHistoryFreqFromCloud(cloud);
+        } else {
+          data.history = cloud.history || [];
+        }
+        if (Object.keys(localFreq).length > 0) {
+          data.freq = localFreq;
+          mergeHistoryFreqFromCloud(cloud);
+        } else {
+          data.freq = cloud.freq || {};
+        }
         if (!data.templates) data.templates = [];
         if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
         if (!data.weekly) data.weekly = {items:[], log:{}};
@@ -3733,6 +3817,9 @@ function init() {
           }
         }
 
+        // Merge history + freq from cloud
+        mergeHistoryFreqFromCloud(cloud);
+
         if (merged > 0 || updated > 0 || orderChanged2 || initMonthlyChanged) {
           data.lastModified = Date.now();
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -3778,12 +3865,18 @@ function init() {
       chunks.push(payload.substring(i, i + CHUNK_SIZE));
     }
     console.warn('[SYNC] beaconSave via fireGet: ' + chunks.length + ' chunks, ' + payload.length + ' chars');
+    // Stagger chunks so each has time to arrive at Apps Script
     for (var c = 0; c < chunks.length; c++) {
-      fireGet(ep + '?action=save_chunk&i=' + c + '&cd=' + encodeURIComponent(chunks[c]));
+      (function(idx) {
+        setTimeout(function() {
+          fireGet(ep + '?action=save_chunk&i=' + idx + '&cd=' + encodeURIComponent(chunks[idx]));
+        }, idx * 150);
+      })(c);
     }
+    // Give all chunks time to arrive before assembling
     setTimeout(function() {
       fireGet(ep + '?action=save_done&n=' + chunks.length + '&len=' + payload.length);
-    }, 300);
+    }, chunks.length * 150 + 500);
   }
 
   // Rule 2: Auto-merge when switching back, save when leaving
