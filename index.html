@@ -3101,6 +3101,7 @@ function _doCloudSave(ep, showFeedback) {
   // Send chunks sequentially via JSONP — each confirmed before sending next
   var chunkIdx = 0;
   var retries = 0;
+  var fullRetries = 0; // full resend attempts (chunks + save_done)
   function sendNextChunk() {
     if (chunkIdx >= chunks.length) {
       // All chunks confirmed — assemble via JSONP
@@ -3111,13 +3112,16 @@ function _doCloudSave(ep, showFeedback) {
           console.warn('[SYNC] SAVE CONFIRMED — ' + chunks.length + ' chunks, ' + syncData.length + ' chars');
           if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
           if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 1000); }
-        } else if (retries < 2) {
-          retries++;
-          console.warn('[SYNC] save_done failed, retry ' + retries);
-          setTimeout(sendNextChunk.bind(null), 500);
+        } else if (fullRetries < 2) {
+          fullRetries++;
+          console.warn('[SYNC] save_done failed, re-sending all chunks (attempt ' + fullRetries + '):', resp && resp.error);
+          // Server clears chunks on failure — must re-send ALL chunks
+          chunkIdx = 0;
+          retries = 0;
+          setTimeout(sendNextChunk, 1000);
         } else {
           _saveInFlight = false;
-          console.warn('[SYNC] save_done FAILED after retries:', err, resp);
+          console.warn('[SYNC] save_done FAILED after full resends:', err, resp);
           showSyncWarning(true);
           if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 2000); }
         }
@@ -3286,10 +3290,10 @@ function syncToCloud() {
         }
       }
       // Safety guard: don't push if we'd overwrite cloud with far fewer tasks
-      var cloudTaskCount = (cloud && cloud.tasks) ? cloud.tasks.length : 0;
+      var cloudActiveCount = (cloud && cloud.tasks) ? cloud.tasks.filter(function(t) { return !t.completedAt; }).length : 0;
       var localTaskCount = (data.tasks || []).filter(function(t) { return !t.completedAt; }).length;
-      if (cloudTaskCount > 5 && localTaskCount < cloudTaskCount * 0.3) {
-        console.warn('[SYNC] BLOCKED PUSH — local has ' + localTaskCount + ' active tasks but cloud has ' + cloudTaskCount + ' total. Possible data loss.');
+      if (cloudActiveCount > 5 && localTaskCount < cloudActiveCount * 0.3) {
+        console.warn('[SYNC] BLOCKED PUSH — local has ' + localTaskCount + ' active tasks but cloud has ' + cloudActiveCount + ' active. Possible data loss.');
         showSyncWarning(true);
         return;
       }
@@ -3904,7 +3908,7 @@ function init() {
 
   // Periodic cloud poll — catch changes from other devices even without tab switch
   setInterval(function() {
-    if (syncReady && document.visibilityState === 'visible') mergeFromCloud(false);
+    if (syncReady && !_saveInFlight && document.visibilityState === 'visible') mergeFromCloud(false);
   }, 30000);
 
   // Auto-refresh theme every minute
