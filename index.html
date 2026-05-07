@@ -902,11 +902,22 @@ let _syncTimer = null;
 let _lastLocalSave = 0;
 let syncReady = false;
 
+function safeLocalSave(key, payload) {
+  try {
+    localStorage.setItem(key, payload);
+    return true;
+  } catch (err) {
+    console.error('[Cadence] localStorage QUOTA ERROR:', err);
+    return false;
+  }
+}
+
 function saveData() {
   data.lastModified = Date.now();
   _lastLocalSave = Date.now();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  console.warn('[SYNC] saveData called, syncReady=' + syncReady);
+  var ok = safeLocalSave(STORAGE_KEY, JSON.stringify(data));
+  console.warn('[SYNC] saveData called, syncReady=' + syncReady + ', localSaveOk=' + ok);
+  if (!ok) return;
   syncToCloud();
 }
 
@@ -2990,7 +3001,7 @@ function clearHistory() {
   if (!confirm('Clear all task history? This will reset your smart suggestions.')) return;
   data.history = [];
   data.freq = {};
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); // save locally only — don't sync cleared history to cloud
+  safeLocalSave(STORAGE_KEY, JSON.stringify(data)); // save locally only — don't sync cleared history to cloud
   renderInsights();
   toast('History cleared');
 }
@@ -3111,7 +3122,7 @@ function _doCloudSave(ep, showFeedback) {
           showSyncWarning(false);
           console.warn('[SYNC] SAVE CONFIRMED — ' + chunks.length + ' chunks, ' + syncData.length + ' chars');
           if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
-          if (resp.ts) { data.lastSyncedAt = resp.ts; localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+          if (resp.ts) { data.lastSyncedAt = resp.ts; safeLocalSave(STORAGE_KEY, JSON.stringify(data)); }
           if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 1000); }
         } else if (fullRetries < 2) {
           fullRetries++;
@@ -3288,7 +3299,7 @@ function syncToCloud() {
           // Merge history + freq from cloud
           mergeHistoryFreqFromCloud(cloud);
           // preserve user's manual order — new tasks append at end
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          safeLocalSave(STORAGE_KEY, JSON.stringify(data));
         }
       }
       // Safety guard: don't push if we'd overwrite cloud with far fewer tasks
@@ -3380,7 +3391,7 @@ function loadFromCloud(showFeedback) {
     if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
     if (!data.weekly) data.weekly = {items:[], log:{}};
     data.lastModified = Date.now();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    safeLocalSave(STORAGE_KEY, JSON.stringify(data));
     renderTasks();
     renderSuggestions();
     renderTemplateSuggestions();
@@ -3625,7 +3636,7 @@ function mergeFromCloud(showToast) {
 
     if (merged > 0 || updated > 0 || data.tasks.length !== beforeCount || orderChanged || weeklyChanged || monthlyChanged) {
       data.lastModified = Date.now();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      safeLocalSave(STORAGE_KEY, JSON.stringify(data));
       renderTasks();
       renderSuggestions();
       renderTemplateSuggestions();
@@ -3650,7 +3661,7 @@ function init() {
   // Stamp legacy data with lastModified so cloud sync comparison works
   if (!data.lastModified) {
     data.lastModified = Date.now();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    safeLocalSave(STORAGE_KEY, JSON.stringify(data));
   }
   pruneHistory();
   initTheme();
@@ -3665,7 +3676,7 @@ function init() {
   if (oldUrl && !getSyncUrl()) {
     if (!data.settings) data.settings = {};
     data.settings.syncUrl = oldUrl;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    safeLocalSave(STORAGE_KEY, JSON.stringify(data));
     localStorage.removeItem('cadence_sync_url');
   }
 
@@ -3718,7 +3729,7 @@ function init() {
         if (!data.templates) data.templates = [];
         if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
         if (!data.weekly) data.weekly = {items:[], log:{}};
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        safeLocalSave(STORAGE_KEY, JSON.stringify(data));
         renderTasks();
         renderSuggestions();
         renderTemplateSuggestions();
@@ -3856,7 +3867,7 @@ function init() {
 
         if (merged > 0 || updated > 0 || orderChanged2 || initMonthlyChanged || initWeeklyChanged) {
           data.lastModified = Date.now();
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          safeLocalSave(STORAGE_KEY, JSON.stringify(data));
           renderTasks();
           renderSuggestions();
           renderTemplateSuggestions();
