@@ -3111,6 +3111,7 @@ function _doCloudSave(ep, showFeedback) {
           showSyncWarning(false);
           console.warn('[SYNC] SAVE CONFIRMED — ' + chunks.length + ' chunks, ' + syncData.length + ' chars');
           if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
+          if (resp.ts) { data.lastSyncedAt = resp.ts; localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
           if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 1000); }
         } else if (fullRetries < 2) {
           fullRetries++;
@@ -3191,6 +3192,7 @@ function syncToCloud() {
     // Pull cloud first, merge, then push merged result
     jsonpFetch(ep + '?action=load', function(err, resp) {
       if (!err && resp && resp.ok && resp.data) {
+        if (resp.ts) data.lastSyncedAt = resp.ts;
         var cloud;
         try { cloud = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data; } catch(e) { cloud = null; }
         if (cloud && cloud.tasks) {
@@ -3821,16 +3823,45 @@ function init() {
           }
         }
 
+        // Merge weekly from cloud on init (item-level merge)
+        var initWeeklyChanged = false;
+        if (cloud.weekly) {
+          if (!data.weekly) data.weekly = {items:[], log:{}};
+          var localWIds3 = new Set((data.weekly.items||[]).map(function(x){return x.id;}));
+          var allWDel3 = new Set((data.weekly.deletedIds||[]).concat(cloud.weekly.deletedIds||[]));
+          (cloud.weekly.items||[]).forEach(function(ci) {
+            if (!localWIds3.has(ci.id) && !allWDel3.has(ci.id)) { data.weekly.items.push(ci); initWeeklyChanged = true; }
+          });
+          var bfw = data.weekly.items.length;
+          data.weekly.items = data.weekly.items.filter(function(i) { return !allWDel3.has(i.id); });
+          if (data.weekly.items.length !== bfw) initWeeklyChanged = true;
+          data.weekly.deletedIds = Array.from(allWDel3).slice(-50);
+          if (cloud.weekly.log) {
+            if (!data.weekly.log) data.weekly.log = {};
+            for (var wlk3 in cloud.weekly.log) {
+              if (!data.weekly.log[wlk3]) { data.weekly.log[wlk3] = cloud.weekly.log[wlk3]; initWeeklyChanged = true; }
+              else {
+                for (var wlid3 in cloud.weekly.log[wlk3]) {
+                  if ((cloud.weekly.log[wlk3][wlid3] || 0) > (data.weekly.log[wlk3][wlid3] || 0)) {
+                    data.weekly.log[wlk3][wlid3] = cloud.weekly.log[wlk3][wlid3]; initWeeklyChanged = true;
+                  }
+                }
+              }
+            }
+          }
+        }
+
         // Merge history + freq from cloud
         mergeHistoryFreqFromCloud(cloud);
 
-        if (merged > 0 || updated > 0 || orderChanged2 || initMonthlyChanged) {
+        if (merged > 0 || updated > 0 || orderChanged2 || initMonthlyChanged || initWeeklyChanged) {
           data.lastModified = Date.now();
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
           renderTasks();
           renderSuggestions();
           renderTemplateSuggestions();
           if (initMonthlyChanged) renderMonthly();
+          if (initWeeklyChanged) renderWeekly();
           var msg = '';
           if (merged > 0) msg += '+' + merged + ' new';
           if (updated > 0) msg += (msg ? ', ' : '') + updated + ' updated';
@@ -3898,6 +3929,11 @@ function init() {
         _doCloudSave(ep, false);
       }
     }
+  });
+
+  // Reconnect after going offline
+  window.addEventListener('online', function() {
+    if (syncReady) setTimeout(function() { syncToCloud(); }, 1000);
   });
 
   // Backup flush for app close / navigation (page being destroyed — use fireGet)
