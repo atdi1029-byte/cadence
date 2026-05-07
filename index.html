@@ -843,7 +843,10 @@ body{background:var(--bg);background-image:var(--bg-grad);color:var(--text);padd
    =================================================================== */
 
 // ===== CONSTANTS =====
-const STORAGE_KEY = 'cadence_data_v1';
+const STORAGE_KEY = 'cadence_data_v1'; // legacy — migrated on first load
+const SK_CORE = 'cadence_core_v1';
+const SK_TASKS = 'cadence_tasks_v1';
+const SK_HISTORY = 'cadence_hist_v1';
 const CATEGORIES = {
   personal: {label:'Personal', color:'var(--cat-personal)'},
   errands:  {label:'Errands',  color:'var(--cat-errands)'},
@@ -866,9 +869,38 @@ let toastTimer = null;
 let lastUndoAction = null;
 
 // ===== DATA PERSISTENCE =====
+function _splitSave(d) {
+  var core = {
+    freq: d.freq || {},
+    templates: d.templates || [],
+    monthly: d.monthly || {items:[],done:{},log:{}},
+    weekly: d.weekly || {items:[],log:{}},
+    settings: d.settings || {},
+    lastModified: d.lastModified,
+    lastSyncedAt: d.lastSyncedAt
+  };
+  var coreOk = safeLocalSave(SK_CORE, JSON.stringify(core));
+  safeLocalSave(SK_TASKS, JSON.stringify(d.tasks || []));
+  safeLocalSave(SK_HISTORY, JSON.stringify(d.history || []));
+  return coreOk;
+}
+
 function loadData() {
   try {
-    data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    var legacy = localStorage.getItem(STORAGE_KEY);
+    if (legacy) {
+      data = JSON.parse(legacy);
+      if (!data) throw 0;
+      _splitSave(data);
+      localStorage.removeItem(STORAGE_KEY);
+    } else {
+      var core = JSON.parse(localStorage.getItem(SK_CORE) || 'null');
+      if (!core) throw 0;
+      data = Object.assign({}, core, {
+        tasks: JSON.parse(localStorage.getItem(SK_TASKS) || '[]'),
+        history: JSON.parse(localStorage.getItem(SK_HISTORY) || '[]')
+      });
+    }
     if (!data) throw 0;
     // ensure all fields
     if (!data.tasks) data.tasks = [];
@@ -915,7 +947,7 @@ function safeLocalSave(key, payload) {
 function saveData() {
   data.lastModified = Date.now();
   _lastLocalSave = Date.now();
-  var ok = safeLocalSave(STORAGE_KEY, JSON.stringify(data));
+  var ok = _splitSave(data);
   console.warn('[SYNC] saveData called, syncReady=' + syncReady + ', localSaveOk=' + ok);
   if (!ok) return;
   syncToCloud();
@@ -3001,7 +3033,7 @@ function clearHistory() {
   if (!confirm('Clear all task history? This will reset your smart suggestions.')) return;
   data.history = [];
   data.freq = {};
-  safeLocalSave(STORAGE_KEY, JSON.stringify(data)); // save locally only — don't sync cleared history to cloud
+  _splitSave(data); // save locally only — don't sync cleared history to cloud
   renderInsights();
   toast('History cleared');
 }
@@ -3122,7 +3154,7 @@ function _doCloudSave(ep, showFeedback) {
           showSyncWarning(false);
           console.warn('[SYNC] SAVE CONFIRMED — ' + chunks.length + ' chunks, ' + syncData.length + ' chars');
           if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
-          if (resp.ts) { data.lastSyncedAt = resp.ts; safeLocalSave(STORAGE_KEY, JSON.stringify(data)); }
+          if (resp.ts) { data.lastSyncedAt = resp.ts; _splitSave(data); }
           if (_savePending) { _savePending = false; setTimeout(function() { _doCloudSave(ep, false); }, 1000); }
         } else if (fullRetries < 2) {
           fullRetries++;
@@ -3299,7 +3331,7 @@ function syncToCloud() {
           // Merge history + freq from cloud
           mergeHistoryFreqFromCloud(cloud);
           // preserve user's manual order — new tasks append at end
-          safeLocalSave(STORAGE_KEY, JSON.stringify(data));
+          _splitSave(data);
         }
       }
       // Safety guard: don't push if we'd overwrite cloud with far fewer tasks
@@ -3391,7 +3423,7 @@ function loadFromCloud(showFeedback) {
     if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
     if (!data.weekly) data.weekly = {items:[], log:{}};
     data.lastModified = Date.now();
-    safeLocalSave(STORAGE_KEY, JSON.stringify(data));
+    _splitSave(data);
     renderTasks();
     renderSuggestions();
     renderTemplateSuggestions();
@@ -3636,7 +3668,7 @@ function mergeFromCloud(showToast) {
 
     if (merged > 0 || updated > 0 || data.tasks.length !== beforeCount || orderChanged || weeklyChanged || monthlyChanged) {
       data.lastModified = Date.now();
-      safeLocalSave(STORAGE_KEY, JSON.stringify(data));
+      _splitSave(data);
       renderTasks();
       renderSuggestions();
       renderTemplateSuggestions();
@@ -3661,7 +3693,7 @@ function init() {
   // Stamp legacy data with lastModified so cloud sync comparison works
   if (!data.lastModified) {
     data.lastModified = Date.now();
-    safeLocalSave(STORAGE_KEY, JSON.stringify(data));
+    _splitSave(data);
   }
   pruneHistory();
   initTheme();
@@ -3676,7 +3708,7 @@ function init() {
   if (oldUrl && !getSyncUrl()) {
     if (!data.settings) data.settings = {};
     data.settings.syncUrl = oldUrl;
-    safeLocalSave(STORAGE_KEY, JSON.stringify(data));
+    _splitSave(data);
     localStorage.removeItem('cadence_sync_url');
   }
 
@@ -3729,7 +3761,7 @@ function init() {
         if (!data.templates) data.templates = [];
         if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
         if (!data.weekly) data.weekly = {items:[], log:{}};
-        safeLocalSave(STORAGE_KEY, JSON.stringify(data));
+        _splitSave(data);
         renderTasks();
         renderSuggestions();
         renderTemplateSuggestions();
@@ -3867,7 +3899,7 @@ function init() {
 
         if (merged > 0 || updated > 0 || orderChanged2 || initMonthlyChanged || initWeeklyChanged) {
           data.lastModified = Date.now();
-          safeLocalSave(STORAGE_KEY, JSON.stringify(data));
+          _splitSave(data);
           renderTasks();
           renderSuggestions();
           renderTemplateSuggestions();
