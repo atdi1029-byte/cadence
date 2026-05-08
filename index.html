@@ -877,7 +877,8 @@ function _splitSave(d) {
     weekly: d.weekly || {items:[],log:{}},
     settings: d.settings || {},
     lastModified: d.lastModified,
-    lastSyncedAt: d.lastSyncedAt
+    lastSyncedAt: d.lastSyncedAt,
+    deletedIds: d.deletedIds || []
   };
   var coreOk = safeLocalSave(SK_CORE, JSON.stringify(core));
   safeLocalSave(SK_TASKS, JSON.stringify(d.tasks || []));
