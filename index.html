@@ -877,6 +877,7 @@ function _splitSave(d) {
     weekly: d.weekly || {items:[],log:{}},
     settings: d.settings || {},
     lastModified: d.lastModified,
+    orderUpdatedAt: d.orderUpdatedAt || 0,
     lastSyncedAt: d.lastSyncedAt,
     deletedIds: d.deletedIds || []
   };
