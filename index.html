@@ -3984,6 +3984,9 @@ function init() {
   // Backup flush for app close / navigation (page being destroyed — use fireGet)
   document.addEventListener('pagehide', function() {
     if (!syncReady) return;
+    // Force beaconSave regardless of _saveInFlight — JSONP can't complete when
+    // the page is being destroyed, so beaconSave (img-based) is the last resort.
+    _saveInFlight = false;
     beaconSave();
   });
 
