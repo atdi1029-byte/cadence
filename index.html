@@ -3128,6 +3128,7 @@ function getSyncPayload() {
 var _saveInFlight = false;
 var _savePending = false;
 var _syncDebounce = null;
+var _lastConfirmedSync = 0; // timestamp of last successful cloud save — gates beaconSave
 
 function _doCloudSave(ep, showFeedback) {
   if (_saveInFlight) { _savePending = true; console.warn('[SYNC] _doCloudSave queued (already in flight)'); return; }
@@ -3153,6 +3154,7 @@ function _doCloudSave(ep, showFeedback) {
       jsonpFetch(ep + '?action=save_done&n=' + chunks.length + '&len=' + syncData.length, function(err, resp) {
         if (!err && resp && resp.ok && resp.saved) {
           _saveInFlight = false;
+          _lastConfirmedSync = Date.now();
           showSyncWarning(false);
           console.warn('[SYNC] SAVE CONFIRMED — ' + chunks.length + ' chunks, ' + syncData.length + ' chars');
           if (showFeedback) toast('Synced ' + data.tasks.length + ' tasks');
@@ -3249,7 +3251,9 @@ function syncToCloud() {
           }
           var allDeleted = new Set(data.deletedIds);
           data.tasks = data.tasks.filter(function(t) { return !cloudDeleted.has(t.id); });
-          // Per-task merge: compare updatedAt timestamps, newer wins
+          // Per-task merge: compare updatedAt timestamps, newer wins;
+          // fall back to global cloudIsNewer for tasks that lack updatedAt.
+          var cloudIsNewer2 = (cloud.lastModified || 0) > (data.lastModified || 0);
           var localMap = {};
           data.tasks.forEach(function(t) { if (t.id) localMap[t.id] = t; });
           for (var i = 0; i < cloud.tasks.length; i++) {
@@ -3259,7 +3263,8 @@ function syncToCloud() {
               var lt = localMap[ct.id];
               var localU = lt.updatedAt || 0;
               var cloudU = ct.updatedAt || 0;
-              if (cloudU > localU && JSON.stringify(lt) !== JSON.stringify(ct)) {
+              var useCloud2 = (cloudU && localU) ? (cloudU > localU) : cloudIsNewer2;
+              if (useCloud2 && JSON.stringify(lt) !== JSON.stringify(ct)) {
                 var idx = data.tasks.indexOf(lt);
                 if (idx >= 0) data.tasks[idx] = ct;
               }
@@ -3984,6 +3989,9 @@ function init() {
   // Backup flush for app close / navigation (page being destroyed — use fireGet)
   document.addEventListener('pagehide', function() {
     if (!syncReady) return;
+    // Only beacon if local was modified after last confirmed sync — prevents
+    // pushing stale data that would overwrite newer cloud state.
+    if (_lastLocalSave <= _lastConfirmedSync) return;
     // Force beaconSave regardless of _saveInFlight — JSONP can't complete when
     // the page is being destroyed, so beaconSave (img-based) is the last resort.
     _saveInFlight = false;
