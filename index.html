@@ -3696,6 +3696,7 @@ function mergeFromCloud(showToast) {
 
 // ===== INITIALIZATION =====
 function init() {
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
   loadData();
   // Stamp legacy data with lastModified so cloud sync comparison works
   if (!data.lastModified) {
