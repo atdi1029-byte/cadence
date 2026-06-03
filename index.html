@@ -2417,7 +2417,7 @@ function deleteWeeklyItem(itemId) {
   data.weekly.items = data.weekly.items.filter(function(i) { return i.id !== itemId; });
   if (!data.weekly.deletedIds) data.weekly.deletedIds = [];
   if (data.weekly.deletedIds.indexOf(itemId) === -1) data.weekly.deletedIds.push(itemId);
-  data.weekly.deletedIds = data.weekly.deletedIds.slice(-50);
+  data.weekly.deletedIds = data.weekly.deletedIds.slice(-500);
   saveData();
   renderWeekly();
   toast('Weekly goal removed');
@@ -2621,7 +2621,7 @@ function deleteMonthlyItem(itemId) {
   data.monthly.items = data.monthly.items.filter(i => i.id !== itemId);
   if (!data.monthly.deletedIds) data.monthly.deletedIds = [];
   data.monthly.deletedIds.push(itemId);
-  if (data.monthly.deletedIds.length > 50) data.monthly.deletedIds = data.monthly.deletedIds.slice(-50);
+  if (data.monthly.deletedIds.length > 500) data.monthly.deletedIds = data.monthly.deletedIds.slice(-500);
   saveData();
   renderMonthly();
   toast('Monthly item removed');
@@ -3091,8 +3091,8 @@ function getSyncPayload() {
   completed.sort(function(a, b) { return new Date(b.completedAt) - new Date(a.completedAt); });
   if (completed.length > 50) completed = completed.slice(0, 50);
   var syncTasks = active.concat(completed);
-  // Cap deletedIds at most recent 50
-  var delIds = (data.deletedIds || []).slice(-50);
+  // Cap deletedIds at most recent 500
+  var delIds = (data.deletedIds || []).slice(-500);
   // Include history + freq so cloud can fully restore after cache wipe
   var hist = (data.history || []).slice(-300);
   var freq = data.freq || {};
