@@ -3264,6 +3264,13 @@ function syncToCloud() {
               var localU = lt.updatedAt || 0;
               var cloudU = ct.updatedAt || 0;
               var useCloud2 = (cloudU && localU) ? (cloudU > localU) : cloudIsNewer2;
+              // Always accept completion from cloud
+              if (!useCloud2 && ct.completedAt && !lt.completedAt) useCloud2 = true;
+              if (!useCloud2 && ct.subtasks && lt.subtasks) {
+                var cdc2 = ct.subtasks.filter(function(s){return s.done;}).length;
+                var ldc2 = lt.subtasks.filter(function(s){return s.done;}).length;
+                if (cdc2 > ldc2) useCloud2 = true;
+              }
               if (useCloud2 && JSON.stringify(lt) !== JSON.stringify(ct)) {
                 var idx = data.tasks.indexOf(lt);
                 if (idx >= 0) data.tasks[idx] = ct;
@@ -3502,6 +3509,14 @@ function mergeFromCloud(showToast) {
         var localU = lt.updatedAt || 0;
         var cloudU = ct.updatedAt || 0;
         var useCloud = (cloudU && localU) ? (cloudU > localU) : cloudIsNewer;
+        // Always accept completion from cloud — if cloud says done, it's done
+        if (!useCloud && ct.completedAt && !lt.completedAt) useCloud = true;
+        // Also sync subtask pill completion from cloud
+        if (!useCloud && ct.subtasks && lt.subtasks) {
+          var cdc = ct.subtasks.filter(function(s){return s.done;}).length;
+          var ldc = lt.subtasks.filter(function(s){return s.done;}).length;
+          if (cdc > ldc) useCloud = true;
+        }
         if (useCloud && JSON.stringify(lt) !== JSON.stringify(ct)) {
           var idx = data.tasks.indexOf(lt);
           if (idx >= 0) { data.tasks[idx] = ct; updated++; }
@@ -3797,6 +3812,14 @@ function init() {
             var localU2 = lt2.updatedAt || 0;
             var cloudU2 = ct.updatedAt || 0;
             var useCloud2 = (cloudU2 && localU2) ? (cloudU2 > localU2) : cloudIsNewer;
+            // Always accept completion from cloud — if cloud says done, it's done
+            if (!useCloud2 && ct.completedAt && !lt2.completedAt) useCloud2 = true;
+            // Also sync subtask pill completion from cloud
+            if (!useCloud2 && ct.subtasks && lt2.subtasks) {
+              var cloudDoneCount = ct.subtasks.filter(function(s){return s.done;}).length;
+              var localDoneCount = lt2.subtasks.filter(function(s){return s.done;}).length;
+              if (cloudDoneCount > localDoneCount) useCloud2 = true;
+            }
             if (useCloud2 && JSON.stringify(lt2) !== JSON.stringify(ct)) {
               var idx = data.tasks.indexOf(lt2);
               if (idx >= 0) { data.tasks[idx] = ct; updated++; }
@@ -3905,21 +3928,20 @@ function init() {
         // Merge history + freq from cloud
         mergeHistoryFreqFromCloud(cloud);
 
-        if (merged > 0 || updated > 0 || orderChanged2 || initMonthlyChanged || initWeeklyChanged) {
-          data.lastModified = Date.now();
-          _splitSave(data);
-          renderTasks();
-          renderSuggestions();
-          renderTemplateSuggestions();
-          if (initMonthlyChanged) renderMonthly();
-          if (initWeeklyChanged) renderWeekly();
+        // Always save + re-render after cloud merge (completion state may have changed)
+        data.lastModified = Date.now();
+        _splitSave(data);
+        renderTasks();
+        renderSuggestions();
+        renderTemplateSuggestions();
+        if (initMonthlyChanged) renderMonthly();
+        if (initWeeklyChanged) renderWeekly();
+        if (merged > 0 || updated > 0 || orderChanged2) {
           var msg = '';
           if (merged > 0) msg += '+' + merged + ' new';
           if (updated > 0) msg += (msg ? ', ' : '') + updated + ' updated';
           if (orderChanged2 && !merged && !updated) msg = 'order synced';
           if (msg) toast('Synced: ' + msg);
-        } else {
-          toast('In sync (' + data.tasks.length + ' tasks)');
         }
       }
       syncReady = true;
