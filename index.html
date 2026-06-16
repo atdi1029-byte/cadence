@@ -1878,6 +1878,9 @@ function renderSuggestions() {
 }
 
 function addFromSuggestion(key, category, text) {
+  // Guard against duplicate active tasks (double-tap or sync race)
+  const exists = data.tasks.some(t => !t.completedAt && t.text.toLowerCase().trim() === text.toLowerCase().trim());
+  if (exists) return;
   const freqEntry = data.freq[key];
   const task = addTask(text, category, {fromSuggestion: true});
   // Restore pill group if the original was one
@@ -3344,6 +3347,7 @@ function syncToCloud() {
           }
           // Merge history + freq from cloud
           mergeHistoryFreqFromCloud(cloud);
+          deduplicateActiveTasks();
           // preserve user's manual order — new tasks append at end
           _splitSave(data);
         }
@@ -3392,6 +3396,38 @@ function mergeHistoryFreqFromCloud(cloud) {
       }
     }
   }
+}
+
+// Deduplicate active tasks by text after cloud merge.
+// When two tasks have the same text and both are active,
+// keep the one with the earlier createdAt (the "original") and discard the newer copy.
+function deduplicateActiveTasks() {
+  var seen = {};
+  var toRemove = [];
+  for (var i = 0; i < data.tasks.length; i++) {
+    var t = data.tasks[i];
+    if (t.completedAt || t.isHeader) continue;
+    var key = t.text.toLowerCase().trim();
+    if (seen[key]) {
+      // Keep the one with earlier createdAt
+      var existing = seen[key];
+      var keepOld = (existing.createdAt || '') <= (t.createdAt || '');
+      if (keepOld) {
+        toRemove.push(t.id);
+      } else {
+        toRemove.push(existing.id);
+        seen[key] = t;
+      }
+    } else {
+      seen[key] = t;
+    }
+  }
+  if (toRemove.length > 0) {
+    var removeSet = new Set(toRemove);
+    data.tasks = data.tasks.filter(function(t) { return !removeSet.has(t.id); });
+    console.warn('[SYNC] dedup removed ' + toRemove.length + ' duplicate active tasks');
+  }
+  return toRemove.length;
 }
 
 // Full restore from cloud — replaces local with cloud data
@@ -3687,8 +3723,9 @@ function mergeFromCloud(showToast) {
 
     // Merge history + freq from cloud
     mergeHistoryFreqFromCloud(cloud);
+    var deduped = deduplicateActiveTasks();
 
-    if (merged > 0 || updated > 0 || data.tasks.length !== beforeCount || orderChanged || weeklyChanged || monthlyChanged) {
+    if (deduped > 0 || merged > 0 || updated > 0 || data.tasks.length !== beforeCount || orderChanged || weeklyChanged || monthlyChanged) {
       data.lastModified = Date.now();
       _splitSave(data);
       renderTasks();
@@ -3927,6 +3964,7 @@ function init() {
 
         // Merge history + freq from cloud
         mergeHistoryFreqFromCloud(cloud);
+        deduplicateActiveTasks();
 
         // Always save + re-render after cloud merge (completion state may have changed)
         data.lastModified = Date.now();
