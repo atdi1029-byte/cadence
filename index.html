@@ -1239,9 +1239,11 @@ function deleteTask(id) {
   const idx = data.tasks.findIndex(t => t.id === id);
   if (idx < 0) return;
   const removed = data.tasks.splice(idx, 1)[0];
+  // Remove any remaining duplicates with same ID
+  data.tasks = data.tasks.filter(t => t.id !== id);
   // Track deletion so cloud sync doesn't resurrect it
   if (!data.deletedIds) data.deletedIds = [];
-  data.deletedIds.push(id);
+  if (!data.deletedIds.includes(id)) data.deletedIds.push(id);
   saveData();
   renderTasks();
   renderSuggestions();
@@ -1568,13 +1570,19 @@ function reorderTasks(newIdOrder) {
   // Separate active and completed tasks
   const completed = data.tasks.filter(t => t.completedAt);
   const reordered = [];
+  const seenIds = new Set();
   for (const id of newIdOrder) {
+    if (seenIds.has(id)) continue;
+    seenIds.add(id);
     const task = data.tasks.find(t => t.id === id);
     if (task) reordered.push(task);
   }
   // Add any active tasks not in the new order (safety)
   for (const t of data.tasks) {
-    if (!t.completedAt && !reordered.includes(t)) reordered.push(t);
+    if (!t.completedAt && !seenIds.has(t.id)) {
+      seenIds.add(t.id);
+      reordered.push(t);
+    }
   }
   data.tasks = [...reordered, ...completed];
   data.orderUpdatedAt = Date.now();
