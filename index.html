@@ -1268,7 +1268,10 @@ function togglePriority(id) {
 }
 
 // ===== RENDER TASKS =====
+var _dragInProgress = false;
+var _renderPending = false;
 function renderTasks() {
+  if (_dragInProgress) { _renderPending = true; return; }
   const active = data.tasks.filter(t => !t.completedAt);
   const twoMinsAgo = new Date(Date.now() - 120000).toISOString();
   const completed = data.tasks.filter(t => t.completedAt && t.completedAt >= twoMinsAgo);
@@ -1471,6 +1474,7 @@ function initDrag(taskList) {
     function onDragStart(clientY) {
       dragging = true;
       card._dragging = true;
+      _dragInProgress = true;
       startY = clientY;
       currentY = startY;
       cardRect = card.getBoundingClientRect();
@@ -1520,7 +1524,7 @@ function initDrag(taskList) {
     }
 
     function onDragEnd() {
-      if (!dragging) return;
+      if (!dragging) { _dragInProgress = false; return; }
       dragging = false;
       setTimeout(() => { card._dragging = false; }, 50);
 
@@ -1540,7 +1544,9 @@ function initDrag(taskList) {
       }
 
       const newOrder = Array.from(taskList.querySelectorAll(DRAG_SEL)).map(c => c.dataset.id);
+      _dragInProgress = false;
       reorderTasks(newOrder);
+      if (_renderPending) { _renderPending = false; renderTasks(); }
     }
 
     // Touch events (mobile)
@@ -1553,6 +1559,7 @@ function initDrag(taskList) {
       onDragMove(e.touches[0].clientY);
     }, {passive: false});
     handle.addEventListener('touchend', function() { onDragEnd(); }, {passive: true});
+    handle.addEventListener('touchcancel', function() { onDragEnd(); }, {passive: true});
 
     // Mouse events (desktop)
     handle.addEventListener('mousedown', function(e) {
