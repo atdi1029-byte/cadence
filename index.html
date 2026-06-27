@@ -1774,12 +1774,19 @@ function pruneHistory() {
   cutoff.setDate(cutoff.getDate() - (data.settings.completedRetention || 90));
   const cutoffStr = cutoff.toISOString();
   data.history = data.history.filter(h => h.completedAt > cutoffStr);
-  // Also clean completed tasks older than 24h
+  // Clean completed tasks older than 24h
+  // Clean stale uncompleted tasks older than 48h (unless held/priority/header/has subtasks)
+  const now = Date.now();
   data.tasks = data.tasks.filter(t => {
-    if (!t.completedAt) return true;
-    if (t.hold) return true;
-    if (t.isHeader) return true;
-    return new Date(t.completedAt) > new Date(Date.now() - 86400000);
+    if (t.hold || t.isHeader) return true;
+    if (t.completedAt) {
+      return new Date(t.completedAt) > new Date(now - 86400000);
+    }
+    // Uncompleted: keep if priority, has subtasks, or created within 48h
+    if (t.priority) return true;
+    if (t.subtasks && t.subtasks.length > 0) return true;
+    const created = new Date(t.createdAt || 0).getTime();
+    return created > now - 172800000;
   });
   saveData();
   localStorage.setItem('cadence_last_prune', today);
