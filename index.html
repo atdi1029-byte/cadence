@@ -1227,6 +1227,9 @@ function completeTask(id) {
   }
   renderSuggestions();
 
+  // Auto-dismiss completed card after 2 min
+  setTimeout(() => renderTasks(), 125000);
+
   // Save for undo
   const undoTask = JSON.parse(JSON.stringify(task));
   toast('Task completed', function() {
