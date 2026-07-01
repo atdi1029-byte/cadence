@@ -912,6 +912,19 @@ function loadData() {
     if (!data.monthly) data.monthly = {items:[], done:{}, log:{}}; if (!data.monthly.log) data.monthly.log = {};
     if (!data.weekly) data.weekly = {items:[], log:{}};
     if (!data.settings) data.settings = {};
+    if (!data.deletedIds) data.deletedIds = [];
+    // Purge old completed tasks on load — prevents stale tasks from lingering
+    var fiveMin = Date.now() - 300000;
+    var purged = 0;
+    data.tasks = data.tasks.filter(function(t) {
+      if (t.completedAt && new Date(t.completedAt).getTime() < fiveMin) {
+        if (t.id && !data.deletedIds.includes(t.id)) data.deletedIds.push(t.id);
+        purged++;
+        return false;
+      }
+      return true;
+    });
+    if (purged) { console.warn('[Cadence] Purged ' + purged + ' stale completed tasks on load'); _splitSave(data); }
   } catch(e) {
     data = {
       tasks: [],
@@ -949,6 +962,16 @@ function safeLocalSave(key, payload) {
 function saveData() {
   data.lastModified = Date.now();
   _lastLocalSave = Date.now();
+  // Purge completed tasks older than 5 minutes — prevents cloud sync from resurrecting them
+  var fiveMin = Date.now() - 300000;
+  if (!data.deletedIds) data.deletedIds = [];
+  data.tasks = data.tasks.filter(function(t) {
+    if (t.completedAt && new Date(t.completedAt).getTime() < fiveMin) {
+      if (t.id && !data.deletedIds.includes(t.id)) data.deletedIds.push(t.id);
+      return false;
+    }
+    return true;
+  });
   var ok = _splitSave(data);
   console.warn('[SYNC] saveData called, syncReady=' + syncReady + ', localSaveOk=' + ok);
   if (!ok) return;
